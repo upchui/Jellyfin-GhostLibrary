@@ -8,50 +8,28 @@
     <div id="GhostLibraryConfigPage"
          data-role="page"
          class="page type-interior pluginConfigurationPage"
-         data-require="emby-input,emby-button,emby-select">
+         data-require="emby-checkbox,emby-button">
         <div data-role="content">
             <div class="content-primary">
                 <form id="GhostLibraryConfigForm">
 
                     <div class="sectionTitleContainer flex align-items-center">
-                        <h2 class="sectionTitle">GhostLibrary Settings</h2>
+                        <h2 class="sectionTitle">GhostLibrary</h2>
                     </div>
 
                     <p>
-                        Hide a specific media library from the client home screen and library list
-                        while keeping it fully accessible to other plugins (e.g. Cinema Mode) and
-                        the file system.
+                        Select the libraries to hide from the client home screen.
+                        Hidden libraries remain fully accessible to other plugins
+                        (e.g. Cinema Mode) and the file system.
                     </p>
 
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="HiddenLibraryName">
-                            Library Name to Hide
-                        </label>
-                        <input id="HiddenLibraryName"
-                               name="HiddenLibraryName"
-                               type="text"
-                               is="emby-input" />
-                        <div class="fieldDescription">
-                            Case-insensitive. Must match the library name exactly as shown in the
-                            Jellyfin dashboard (e.g. <em>Trailers</em>).
-                            Leave empty to match by ID only.
-                        </div>
+                    <div class="sectionTitleContainer" style="margin-top:1.5em">
+                        <h3 class="sectionTitle" style="font-size:1em">Libraries</h3>
                     </div>
 
-                    <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="HiddenLibraryId">
-                            Library ID (optional)
-                        </label>
-                        <input id="HiddenLibraryId"
-                               name="HiddenLibraryId"
-                               type="text"
-                               is="emby-input"
-                               placeholder="e.g. 3a1b2c3d-4e5f-6789-abcd-ef0123456789" />
-                        <div class="fieldDescription">
-                            The library GUID — more reliable than name (survives renames).
-                            Find it in the URL when browsing the library in the Jellyfin web UI.
-                            Leave empty to match by name only.
-                        </div>
+                    <!-- Populated dynamically from /Library/VirtualFolders -->
+                    <div id="ghostLibraryList" style="margin-bottom:1.5em">
+                        <p id="ghostLibraryStatus" style="opacity:0.7">Loading libraries…</p>
                     </div>
 
                     <div>
@@ -70,34 +48,108 @@
             (function () {
                 var pluginUniqueId = '8a3b2c7d-f1e4-4a9b-b6d3-1c2e5f8a0d4e';
 
+                // Map Jellyfin collection types to readable labels
+                var typeLabels = {
+                    movies:      'Movies',
+                    tvshows:     'TV Shows',
+                    music:       'Music',
+                    musicvideos: 'Music Videos',
+                    homevideos:  'Home Videos',
+                    boxsets:     'Collections',
+                    books:       'Books',
+                    photos:      'Photos',
+                    mixed:       'Mixed Content'
+                };
+
+                function escapeHtml(str) {
+                    return String(str || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                }
+
+                function renderLibraries(libraries, hiddenIds) {
+                    var container = document.querySelector('#ghostLibraryList');
+                    container.innerHTML = '';
+
+                    if (!libraries || libraries.length === 0) {
+                        container.innerHTML = '<p style="opacity:0.7">No libraries found.</p>';
+                        return;
+                    }
+
+                    libraries.forEach(function (lib) {
+                        var isHidden  = hiddenIds.indexOf(lib.ItemId) !== -1;
+                        var typeKey   = (lib.CollectionType || 'mixed').toLowerCase();
+                        var typeLabel = typeLabels[typeKey] || lib.CollectionType || 'Mixed';
+
+                        var label = document.createElement('label');
+                        label.className = 'checkboxContainer';
+                        label.style.cssText =
+                            'display:flex;align-items:center;padding:10px 0;' +
+                            'cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.07);';
+
+                        var cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.setAttribute('is', 'emby-checkbox');
+                        cb.className = 'ghost-library-cb';
+                        cb.dataset.libraryId = lib.ItemId;
+                        cb.checked = isHidden;
+
+                        var info = document.createElement('span');
+                        info.style.cssText = 'margin-left:14px;line-height:1.4;';
+                        info.innerHTML =
+                            '<strong>' + escapeHtml(lib.Name) + '</strong>' +
+                            '<br><small style="opacity:0.55">' + escapeHtml(typeLabel) + '</small>';
+
+                        label.appendChild(cb);
+                        label.appendChild(info);
+                        container.appendChild(label);
+                    });
+                }
+
+                // ── Load config + libraries in parallel, then render ──────────────────
                 document.querySelector('#GhostLibraryConfigPage')
                     .addEventListener('pageshow', function () {
                         Dashboard.showLoadingMsg();
-                        ApiClient.getPluginConfiguration(pluginUniqueId)
-                            .then(function (config) {
-                                document.querySelector('#HiddenLibraryName').value =
-                                    config.HiddenLibraryName || '';
-                                document.querySelector('#HiddenLibraryId').value =
-                                    config.HiddenLibraryId || '';
-                                Dashboard.hideLoadingMsg();
-                            });
+
+                        Promise.all([
+                            ApiClient.getPluginConfiguration(pluginUniqueId),
+                            ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
+                        ]).then(function (results) {
+                            var config    = results[0];
+                            var libraries = results[1];
+                            var hiddenIds = config.HiddenLibraryIds || [];
+
+                            renderLibraries(libraries, hiddenIds);
+                            Dashboard.hideLoadingMsg();
+                        }).catch(function () {
+                            document.querySelector('#ghostLibraryStatus').textContent =
+                                'Error loading libraries.';
+                            Dashboard.hideLoadingMsg();
+                        });
                     });
 
+                // ── Save: collect checked IDs and persist ─────────────────────────────
                 document.querySelector('#GhostLibraryConfigForm')
                     .addEventListener('submit', function (e) {
                         e.preventDefault();
                         Dashboard.showLoadingMsg();
+
+                        var selectedIds = Array.prototype.slice
+                            .call(document.querySelectorAll('.ghost-library-cb:checked'))
+                            .map(function (cb) { return cb.dataset.libraryId; });
+
                         ApiClient.getPluginConfiguration(pluginUniqueId)
                             .then(function (config) {
-                                config.HiddenLibraryName =
-                                    document.querySelector('#HiddenLibraryName').value.trim();
-                                config.HiddenLibraryId =
-                                    document.querySelector('#HiddenLibraryId').value.trim();
-                                ApiClient.updatePluginConfiguration(pluginUniqueId, config)
-                                    .then(function (result) {
-                                        Dashboard.processPluginConfigurationUpdateResult(result);
-                                    });
+                                config.HiddenLibraryIds = selectedIds;
+                                return ApiClient.updatePluginConfiguration(
+                                    pluginUniqueId, config);
+                            })
+                            .then(function (result) {
+                                Dashboard.processPluginConfigurationUpdateResult(result);
                             });
+
                         return false;
                     });
             })();

@@ -1,3 +1,4 @@
+using System;
 using MediaBrowser.Model.Plugins;
 
 namespace Jellyfin.Plugin.GhostLibrary.Configuration;
@@ -9,17 +10,9 @@ namespace Jellyfin.Plugin.GhostLibrary.Configuration;
 public class PluginConfiguration : BasePluginConfiguration
 {
     /// <summary>
-    /// Gets or sets the display name of the library to hide (case-insensitive).
-    /// Matched against <c>BaseItemDto.Name</c> in API responses.
-    /// Leave empty to match by <see cref="HiddenLibraryId"/> only.
+    /// Gets or sets the GUIDs of the libraries to hide.
+    /// Each entry is a string representation of a <see cref="System.Guid"/>.
+    /// The config page populates this automatically from the available libraries.
     /// </summary>
-    public string HiddenLibraryName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the GUID of the library to hide (optional).
-    /// More precise than name matching — survives library renames.
-    /// Find the ID in the Jellyfin dashboard URL when browsing the library.
-    /// Leave empty to match by <see cref="HiddenLibraryName"/> only.
-    /// </summary>
-    public string HiddenLibraryId { get; set; } = string.Empty;
+    public string[] HiddenLibraryIds { get; set; } = Array.Empty<string>();
 }

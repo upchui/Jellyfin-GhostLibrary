@@ -1,11 +1,14 @@
-# GhostLibrary
+<div align="center">
+  <img src="img/image.png" alt="GhostLibrary" width="180" />
+  <h1>GhostLibrary</h1>
 
-[![Build](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/build.yml/badge.svg)](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/build.yml)
-[![Release](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/release.yml/badge.svg)](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/release.yml)
-[![Latest Release](https://img.shields.io/github/v/release/upchui/Jellyfin-GhostLibrary)](https://github.com/upchui/Jellyfin-GhostLibrary/releases/latest)
-[![Jellyfin](https://img.shields.io/badge/Jellyfin-10.9%2B-blue)](https://jellyfin.org)
+  [![Build](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/build.yml/badge.svg)](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/build.yml)
+  [![Release](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/release.yml/badge.svg)](https://github.com/upchui/Jellyfin-GhostLibrary/actions/workflows/release.yml)
+  [![Latest Release](https://img.shields.io/github/v/release/upchui/Jellyfin-GhostLibrary)](https://github.com/upchui/Jellyfin-GhostLibrary/releases/latest)
+  [![Jellyfin](https://img.shields.io/badge/Jellyfin-10.9%2B-blue)](https://jellyfin.org)
 
-A [Jellyfin](https://jellyfin.org) server plugin that hides selected media libraries from the client home screen and library list — without blocking access for other plugins or the filesystem.
+  <p>A <a href="https://jellyfin.org">Jellyfin</a> server plugin that hides selected media libraries from the client home screen and library list — without blocking access for other plugins or the filesystem.</p>
+</div>
 
 ## Why?
 

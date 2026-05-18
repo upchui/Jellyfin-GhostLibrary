@@ -8,6 +8,14 @@
     "owner": "upchui",
     "versions": [
       {
+        "version": "1.0.0.4",
+        "changelog": "See GitHub release notes.",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/upchui/Jellyfin-GhostLibrary/releases/download/v1.0.0.4/GhostLibrary_1.0.0.4.zip",
+        "checksum": "6642f59c23f2bd0bd67661bb46cd5568",
+        "timestamp": "2026-05-18T22:42:29.0000000Z"
+      },
+      {
         "version": "1.0.0.3",
         "changelog": "See GitHub release notes.",
         "targetAbi": "10.9.0.0",

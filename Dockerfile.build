@@ -1,0 +1,21 @@
+# ─── Stage 1: Build ──────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
+WORKDIR /src
+
+# Copy project file first for layer-cached restore
+COPY GhostLibrary.csproj ./
+RUN dotnet restore
+
+# Copy remaining sources and publish
+COPY . .
+RUN dotnet publish -c Release -o /output \
+    --no-restore \
+    /p:DebugType=None \
+    /p:DebugSymbols=false
+
+# ─── Stage 2: Export ─────────────────────────────────────────────────────────
+# Using scratch as the final stage so `docker build --output` extracts only
+# the published artifacts — no OS layer is included in the output.
+FROM scratch AS export
+COPY --from=build /output /

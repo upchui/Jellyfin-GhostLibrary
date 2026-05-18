@@ -1,0 +1,11 @@
+[
+  {
+    "category": "General",
+    "guid": "8a3b2c7d-f1e4-4a9b-b6d3-1c2e5f8a0d4e",
+    "name": "GhostLibrary",
+    "description": "Hides a configured media library from Jellyfin client API responses while keeping it fully accessible to other plugins (e.g. Cinema Mode) and the filesystem.",
+    "overview": "Hide a specific library from the client home screen without blocking filesystem or plugin access.",
+    "owner": "upchui",
+    "versions": []
+  }
+]

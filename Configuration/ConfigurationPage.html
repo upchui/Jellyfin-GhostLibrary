@@ -3,156 +3,262 @@
 <head>
     <meta charset="utf-8">
     <title>GhostLibrary</title>
+    <style>
+        /* ── Card list ───────────────────────────────────────────────────── */
+        .ghost-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: .75em 0 1.75em;
+        }
+
+        /* Each library row is a <label> so the full row is clickable */
+        .ghost-card {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 6px;
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.08);
+            cursor: pointer;
+            user-select: none;
+            transition: background .15s, border-color .15s;
+        }
+        .ghost-card:hover {
+            background: rgba(255,255,255,.08);
+        }
+        /* Active / hidden state — blue accent */
+        .ghost-card.is-hidden {
+            background: rgba(0,164,220,.09);
+            border-color: rgba(0,164,220,.45);
+        }
+
+        /* ── Left icon bubble ────────────────────────────────────────────── */
+        .ghost-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            margin-right: 14px;
+            transition: background .15s;
+        }
+        .ghost-card.is-hidden .ghost-icon {
+            background: rgba(0,164,220,.22);
+        }
+
+        /* ── Library name + type ─────────────────────────────────────────── */
+        .ghost-info   { flex: 1; min-width: 0; }
+        .ghost-name   { font-size: 1em; font-weight: 500;
+                        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ghost-type   { font-size: .78em; opacity: .5; margin-top: 2px; text-transform: capitalize; }
+
+        /* ── Right-side circle checkmark ─────────────────────────────────── */
+        .ghost-tick {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,.22);
+            margin-left: 16px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: transparent;
+            transition: background .15s, border-color .15s, color .15s;
+        }
+        .ghost-card.is-hidden .ghost-tick {
+            background: #00a4dc;
+            border-color: #00a4dc;
+            color: #fff;
+        }
+
+        /* Native checkbox is invisible — label handles interaction */
+        .ghost-card input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+        }
+
+        /* ── Status line ─────────────────────────────────────────────────── */
+        .ghost-status {
+            font-size: .82em;
+            opacity: .55;
+            margin-bottom: .4em;
+            min-height: 1.2em;
+        }
+    </style>
 </head>
 <body>
     <div id="GhostLibraryConfigPage"
          data-role="page"
-         class="page type-interior pluginConfigurationPage"
-         data-require="emby-checkbox,emby-button">
+         class="page type-interior pluginConfigurationPage">
         <div data-role="content">
             <div class="content-primary">
                 <form id="GhostLibraryConfigForm">
 
-                    <div class="sectionTitleContainer flex align-items-center">
+                    <div class="sectionTitleContainer">
                         <h2 class="sectionTitle">GhostLibrary</h2>
                     </div>
-
-                    <p>
+                    <p style="opacity:.75; margin-bottom:1.5em">
                         Select the libraries to hide from the client home screen.
                         Hidden libraries remain fully accessible to other plugins
-                        (e.g. Cinema Mode) and the file system.
+                        (e.g.&nbsp;Cinema&nbsp;Mode) and the file system.
                     </p>
 
-                    <div class="sectionTitleContainer" style="margin-top:1.5em">
+                    <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Libraries</h3>
                     </div>
 
-                    <!-- Populated dynamically from /Library/VirtualFolders -->
-                    <div id="ghostLibraryList" style="margin-bottom:1.5em">
-                        <p id="ghostLibraryStatus" style="opacity:0.7">Loading libraries…</p>
+                    <div id="ghostStatus" class="ghost-status"></div>
+                    <div id="ghostList"   class="ghost-list">
+                        <p style="opacity:.5">Loading libraries…</p>
                     </div>
 
-                    <div>
-                        <button is="emby-button"
-                                type="submit"
-                                class="raised button-submit block emby-button">
-                            <span>Save</span>
-                        </button>
-                    </div>
+                    <button is="emby-button"
+                            type="submit"
+                            class="raised button-submit block emby-button">
+                        <span>Save</span>
+                    </button>
 
                 </form>
             </div>
         </div>
 
         <script type="text/javascript">
-            (function () {
-                var pluginUniqueId = '8a3b2c7d-f1e4-4a9b-b6d3-1c2e5f8a0d4e';
+        (function () {
+            var PLUGIN_ID = '8a3b2c7d-f1e4-4a9b-b6d3-1c2e5f8a0d4e';
 
-                // Map Jellyfin collection types to readable labels
-                var typeLabels = {
-                    movies:      'Movies',
-                    tvshows:     'TV Shows',
-                    music:       'Music',
-                    musicvideos: 'Music Videos',
-                    homevideos:  'Home Videos',
-                    boxsets:     'Collections',
-                    books:       'Books',
-                    photos:      'Photos',
-                    mixed:       'Mixed Content'
-                };
+            var TYPE_ICONS = {
+                movies:      '🎬',
+                tvshows:     '📺',
+                music:       '🎵',
+                musicvideos: '🎸',
+                homevideos:  '🏠',
+                boxsets:     '📦',
+                books:       '📚',
+                photos:      '📷',
+                mixed:       '📁'
+            };
 
-                function escapeHtml(str) {
-                    return String(str || '')
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;');
+            var TYPE_LABELS = {
+                movies:      'Movies',
+                tvshows:     'TV Shows',
+                music:       'Music',
+                musicvideos: 'Music Videos',
+                homevideos:  'Home Videos',
+                boxsets:     'Collections',
+                books:       'Books',
+                photos:      'Photos',
+                mixed:       'Mixed Content'
+            };
+
+            function esc(s) {
+                return String(s || '')
+                    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            }
+
+            function updateStatus() {
+                var n = document.querySelectorAll('.ghost-cb:checked').length;
+                document.querySelector('#ghostStatus').textContent =
+                    n === 0 ? 'No libraries hidden' :
+                    n === 1 ? '1 library hidden'    :
+                              n + ' libraries hidden';
+            }
+
+            function setCardState(card, hidden) {
+                card.classList.toggle('is-hidden', hidden);
+                var tick = card.querySelector('.ghost-tick');
+                tick.textContent = hidden ? '✓' : '';
+            }
+
+            function renderLibraries(libraries, hiddenIds) {
+                var list = document.querySelector('#ghostList');
+                list.innerHTML = '';
+
+                if (!libraries || !libraries.length) {
+                    list.innerHTML = '<p style="opacity:.5">No libraries found.</p>';
+                    updateStatus();
+                    return;
                 }
 
-                function renderLibraries(libraries, hiddenIds) {
-                    var container = document.querySelector('#ghostLibraryList');
-                    container.innerHTML = '';
+                libraries.forEach(function (lib) {
+                    var hidden    = hiddenIds.indexOf(lib.ItemId) !== -1;
+                    var typeKey   = (lib.CollectionType || 'mixed').toLowerCase();
+                    var icon      = TYPE_ICONS[typeKey]  || '📁';
+                    var typeLabel = TYPE_LABELS[typeKey] || lib.CollectionType || 'Mixed';
 
-                    if (!libraries || libraries.length === 0) {
-                        container.innerHTML = '<p style="opacity:0.7">No libraries found.</p>';
-                        return;
-                    }
+                    var label = document.createElement('label');
+                    label.className = 'ghost-card' + (hidden ? ' is-hidden' : '');
+                    label.innerHTML =
+                        '<input type="checkbox" class="ghost-cb"' +
+                            ' data-library-id="' + esc(lib.ItemId) + '"' +
+                            (hidden ? ' checked' : '') + '>' +
+                        '<div class="ghost-icon">' + icon + '</div>' +
+                        '<div class="ghost-info">' +
+                            '<div class="ghost-name">' + esc(lib.Name)  + '</div>' +
+                            '<div class="ghost-type">' + esc(typeLabel) + '</div>' +
+                        '</div>' +
+                        '<div class="ghost-tick">' + (hidden ? '✓' : '') + '</div>';
 
-                    libraries.forEach(function (lib) {
-                        var isHidden  = hiddenIds.indexOf(lib.ItemId) !== -1;
-                        var typeKey   = (lib.CollectionType || 'mixed').toLowerCase();
-                        var typeLabel = typeLabels[typeKey] || lib.CollectionType || 'Mixed';
-
-                        var label = document.createElement('label');
-                        label.className = 'checkboxContainer';
-                        label.style.cssText =
-                            'display:flex;align-items:center;padding:10px 0;' +
-                            'cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.07);';
-
-                        var cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.setAttribute('is', 'emby-checkbox');
-                        cb.className = 'ghost-library-cb';
-                        cb.dataset.libraryId = lib.ItemId;
-                        cb.checked = isHidden;
-
-                        var info = document.createElement('span');
-                        info.style.cssText = 'margin-left:14px;line-height:1.4;';
-                        info.innerHTML =
-                            '<strong>' + escapeHtml(lib.Name) + '</strong>' +
-                            '<br><small style="opacity:0.55">' + escapeHtml(typeLabel) + '</small>';
-
-                        label.appendChild(cb);
-                        label.appendChild(info);
-                        container.appendChild(label);
+                    label.querySelector('input').addEventListener('change', function () {
+                        setCardState(label, this.checked);
+                        updateStatus();
                     });
-                }
 
-                // ── Load config + libraries in parallel, then render ──────────────────
-                document.querySelector('#GhostLibraryConfigPage')
-                    .addEventListener('pageshow', function () {
-                        Dashboard.showLoadingMsg();
+                    list.appendChild(label);
+                });
 
-                        Promise.all([
-                            ApiClient.getPluginConfiguration(pluginUniqueId),
-                            ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
-                        ]).then(function (results) {
-                            var config    = results[0];
-                            var libraries = results[1];
-                            var hiddenIds = config.HiddenLibraryIds || [];
+                updateStatus();
+            }
 
-                            renderLibraries(libraries, hiddenIds);
-                            Dashboard.hideLoadingMsg();
-                        }).catch(function () {
-                            document.querySelector('#ghostLibraryStatus').textContent =
-                                'Error loading libraries.';
-                            Dashboard.hideLoadingMsg();
+            /* ── Bootstrap: load config + library list in parallel ─────── */
+            document.querySelector('#GhostLibraryConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    Promise.all([
+                        ApiClient.getPluginConfiguration(PLUGIN_ID),
+                        ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
+                    ]).then(function (r) {
+                        renderLibraries(r[1], r[0].HiddenLibraryIds || []);
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function () {
+                        document.querySelector('#ghostList').innerHTML =
+                            '<p style="color:var(--color-red,#e53935)">Failed to load libraries.</p>';
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            /* ── Save ──────────────────────────────────────────────────── */
+            document.querySelector('#GhostLibraryConfigForm')
+                .addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+
+                    var ids = Array.prototype.slice
+                        .call(document.querySelectorAll('.ghost-cb:checked'))
+                        .map(function (cb) { return cb.dataset.libraryId; });
+
+                    ApiClient.getPluginConfiguration(PLUGIN_ID)
+                        .then(function (cfg) {
+                            cfg.HiddenLibraryIds = ids;
+                            return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg);
+                        })
+                        .then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
                         });
-                    });
 
-                // ── Save: collect checked IDs and persist ─────────────────────────────
-                document.querySelector('#GhostLibraryConfigForm')
-                    .addEventListener('submit', function (e) {
-                        e.preventDefault();
-                        Dashboard.showLoadingMsg();
-
-                        var selectedIds = Array.prototype.slice
-                            .call(document.querySelectorAll('.ghost-library-cb:checked'))
-                            .map(function (cb) { return cb.dataset.libraryId; });
-
-                        ApiClient.getPluginConfiguration(pluginUniqueId)
-                            .then(function (config) {
-                                config.HiddenLibraryIds = selectedIds;
-                                return ApiClient.updatePluginConfiguration(
-                                    pluginUniqueId, config);
-                            })
-                            .then(function (result) {
-                                Dashboard.processPluginConfigurationUpdateResult(result);
-                            });
-
-                        return false;
-                    });
-            })();
+                    return false;
+                });
+        })();
         </script>
     </div>
 </body>

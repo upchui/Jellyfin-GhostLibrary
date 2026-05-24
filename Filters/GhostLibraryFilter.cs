@@ -42,6 +42,13 @@ public class GhostLibraryFilter : IAsyncActionFilter
         var path      = context.HttpContext.Request.Path.Value ?? string.Empty;
         var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
 
+        // Never filter intro/theme requests — these must always pass through.
+        if (path.EndsWith("/Intros", StringComparison.OrdinalIgnoreCase))
+        {
+            await next().ConfigureAwait(false);
+            return;
+        }
+
         // Strip conditional GET headers on /Views so Jellyfin cannot return 304
         // which would bypass this filter entirely.
         if (path.EndsWith("/Views", StringComparison.OrdinalIgnoreCase))

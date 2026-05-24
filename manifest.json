@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/upchui/Jellyfin-GhostLibrary/refs/heads/main/img/image.png",
     "versions": [
       {
+        "version": "1.0.0.7",
+        "changelog": "See GitHub release notes.",
+        "targetAbi": "10.9.0.0",
+        "sourceUrl": "https://github.com/upchui/Jellyfin-GhostLibrary/releases/download/v1.0.0.7/GhostLibrary_1.0.0.7.zip",
+        "checksum": "18369af9ab3460da67c2f8abbaa92c84",
+        "timestamp": "2026-05-24T16:26:46.0000000Z"
+      },
+      {
         "version": "1.0.0.6",
         "changelog": "See GitHub release notes.",
         "targetAbi": "10.9.0.0",

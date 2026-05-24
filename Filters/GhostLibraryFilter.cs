@@ -242,20 +242,31 @@ public class GhostLibraryFilter : IAsyncActionFilter
         HashSet<Guid> stealthIds,
         HashSet<Guid> hiddenFolderIds)
     {
-        var current = _libraryManager.GetItemById(itemId);
-        if (current is null) return ItemAction.Keep;
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null) return ItemAction.Keep;
 
-        var parentId = current.ParentId;
-        while (parentId != Guid.Empty)
+        // Use GetCollectionFolders — the authoritative API for mapping any item to its
+        // top-level library (CollectionFolder). Walking ParentId alone is unreliable
+        // because CollectionFolder nodes are virtual and may not appear in the chain.
+        foreach (var folder in _libraryManager.GetCollectionFolders(item))
         {
-            if (hiddenIds.Contains(parentId) || hiddenFolderIds.Contains(parentId))
-                return ItemAction.Remove;
-            if (stealthIds.Contains(parentId))
-                return ItemAction.Remove; // content items in stealth libs are also removed
+            if (hiddenIds.Contains(folder.Id))  return ItemAction.Remove;
+            if (stealthIds.Contains(folder.Id)) return ItemAction.Remove;
+        }
 
-            var parent = _libraryManager.GetItemById(parentId);
-            if (parent is null) break;
-            parentId = parent.ParentId;
+        // Also walk parent chain for sub-folder hiding (HiddenFolderIds).
+        if (hiddenFolderIds.Count > 0)
+        {
+            var parentId = item.ParentId;
+            while (parentId != Guid.Empty)
+            {
+                if (hiddenFolderIds.Contains(parentId))
+                    return ItemAction.Remove;
+
+                var parent = _libraryManager.GetItemById(parentId);
+                if (parent is null) break;
+                parentId = parent.ParentId;
+            }
         }
 
         return ItemAction.Keep;

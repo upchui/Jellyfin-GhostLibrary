@@ -29,15 +29,13 @@ namespace Jellyfin.Plugin.GhostLibrary.Filters;
 public class GhostLibraryFilter : IAsyncActionFilter
 {
     private readonly ILibraryManager _libraryManager;
-    private readonly IUserManager _userManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GhostLibraryFilter"/> class.
     /// </summary>
-    public GhostLibraryFilter(ILibraryManager libraryManager, IUserManager userManager)
+    public GhostLibraryFilter(ILibraryManager libraryManager)
     {
         _libraryManager = libraryManager;
-        _userManager = userManager;
     }
 
     /// <inheritdoc />
@@ -78,18 +76,12 @@ public class GhostLibraryFilter : IAsyncActionFilter
         }
 
         // ── Admin bypass ──────────────────────────────────────────────────────
-        // When enabled, admins always see every library regardless of the hidden list.
-        if (config.VisibleToAdmins)
+        // Read the role directly from the validated JWT claim — no IUserManager
+        // call needed, which avoids ABI differences across Jellyfin versions.
+        if (config.VisibleToAdmins
+            && context.HttpContext.User.HasClaim(ClaimTypes.Role, "Administrator"))
         {
-            var userIdValue = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userIdValue is not null && Guid.TryParse(userIdValue, out var requestingUserId))
-            {
-                var user = _userManager.GetUserById(requestingUserId);
-                if (user?.HasPermission(PermissionKind.IsAdministrator) == true)
-                {
-                    return;
-                }
-            }
+            return;
         }
 
         // ── Build hidden-ID lookup ────────────────────────────────────────────

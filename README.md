@@ -25,7 +25,7 @@ GhostLibrary intercepts API responses before they reach the client and silently 
 | **Content filtering** | Items from hidden/stealth libraries are also removed from Latest, Continue Watching, Next Up, and Similar rows |
 | **Admin bypass** | Administrators always see all libraries (configurable) |
 | **Master switch** | Pause all filtering without losing any settings |
-| **Schedule rules** | Per-library time windows — only hide during specific hours (supports overnight spans) |
+| **Schedule rules** | Per-library rules combining date range, day-of-week, and daily time window (all ANDed) |
 | **Client filter** | Restrict filtering to specific clients by User-Agent substring |
 | **Sub-folder hiding** | Hide individual folders within an otherwise visible library |
 | **Activity log** | Real-time log of every filter event — what was removed, when, and for which client |
@@ -78,7 +78,13 @@ GhostLibrary intercepts API responses before they reach the client and silently 
 
 ### Schedule (optional)
 
-Set a **From / Until** time window per hidden library. Outside that window the library is visible. Overnight spans (e.g. 22:00 – 06:00) are supported.
+Per-library rules for when hiding is active. All conditions are ANDed — leave everything blank to hide at all times.
+
+| Field | Description |
+|-------|-------------|
+| **Date Range** | First and last calendar date the rule applies. Leave *Until* empty for permanent access. |
+| **Weekly Schedule** | Which days of the week the rule is active. No days selected = every day. |
+| **Daily Time Window** | Time-of-day window (e.g. 22:00 – 06:00). Overnight spans are supported. Leave blank = all day. |
 
 ### Client Filter (optional)
 

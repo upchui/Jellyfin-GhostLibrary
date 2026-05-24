@@ -25,7 +25,7 @@ GhostLibrary intercepts API responses before they reach the client and silently 
 | **Content filtering** | Items from hidden/stealth libraries are also removed from Latest, Continue Watching, Next Up, and Similar rows |
 | **Admin bypass** | Administrators always see all libraries (configurable) |
 | **Master switch** | Pause all filtering without losing any settings |
-| **Schedule rules** | Per-library rules combining date range, day-of-week, and daily time window (all ANDed) |
+| **Schedule rules** | Per-library rules combining date range, day of week, and daily time window — all conditions must match |
 | **Client filter** | Restrict filtering to specific clients by User-Agent substring |
 | **Sub-folder hiding** | Hide individual folders within an otherwise visible library |
 | **Activity log** | Real-time log of every filter event — what was removed, when, and for which client |

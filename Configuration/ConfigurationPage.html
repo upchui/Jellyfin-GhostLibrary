@@ -15,23 +15,29 @@
                     <div class="sectionTitleContainer">
                         <h2 class="sectionTitle">GhostLibrary</h2>
                     </div>
-
                     <p style="opacity:.75; margin-bottom:1.5em">
                         Select the libraries to hide from the client home screen.
                         Hidden libraries remain fully accessible to other plugins
                         (e.g.&nbsp;Cinema&nbsp;Mode) and the file system.
                     </p>
 
+                    <!-- ── Options ──────────────────────────────────────────── -->
+                    <div class="sectionTitleContainer">
+                        <h3 class="sectionTitle" style="font-size:1em">Options</h3>
+                    </div>
+
+                    <div id="ghostOptions"
+                         style="display:flex; flex-direction:column; gap:8px; margin-bottom:1.75em">
+                    </div>
+
+                    <!-- ── Libraries ────────────────────────────────────────── -->
                     <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Libraries</h3>
                     </div>
 
-                    <!-- Status line, e.g. "2 libraries hidden" -->
                     <div id="ghostStatus"
                          style="font-size:.82em; opacity:.55; margin-bottom:.6em; min-height:1.2em">
                     </div>
-
-                    <!-- Cards injected here by JS -->
                     <div id="ghostList"
                          style="display:flex; flex-direction:column; gap:8px; margin-bottom:1.75em">
                         <p style="opacity:.5">Loading libraries…</p>
@@ -62,7 +68,6 @@
                 photos:      '📷',
                 mixed:       '📁'
             };
-
             var TYPE_LABELS = {
                 movies:      'Movies',
                 tvshows:     'TV Shows',
@@ -75,94 +80,110 @@
                 mixed:       'Mixed Content'
             };
 
-            /* ── Inline style helpers ──────────────────────────────── */
-            var CARD_BASE    = 'display:flex; align-items:center; padding:14px 16px;' +
-                               'border-radius:6px; cursor:pointer; margin:0;';
-            var CARD_NORMAL  = CARD_BASE + 'background:rgba(255,255,255,.04);' +
+            /* ── Inline style constants ──────────────────────────────────── */
+            var CARD_NORMAL  = 'display:flex; align-items:center; padding:14px 16px;' +
+                               'border-radius:6px; cursor:pointer; margin:0;' +
+                               'background:rgba(255,255,255,.04);' +
                                'border:1px solid rgba(255,255,255,.08);';
-            var CARD_HIDDEN  = CARD_BASE + 'background:rgba(0,164,220,.09);' +
+            var CARD_ON      = 'display:flex; align-items:center; padding:14px 16px;' +
+                               'border-radius:6px; cursor:pointer; margin:0;' +
+                               'background:rgba(0,164,220,.09);' +
                                'border:1px solid rgba(0,164,220,.45);';
             var ICON_NORMAL  = 'width:42px; height:42px; border-radius:50%; flex-shrink:0;' +
                                'display:flex; align-items:center; justify-content:center;' +
-                               'font-size:20px; margin-right:14px; background:rgba(255,255,255,.08);';
-            var ICON_HIDDEN  = ICON_NORMAL.replace('rgba(255,255,255,.08)', 'rgba(0,164,220,.22)');
+                               'font-size:20px; margin-right:14px;' +
+                               'background:rgba(255,255,255,.08);';
+            var ICON_ON      = ICON_NORMAL.replace('rgba(255,255,255,.08)',
+                                                   'rgba(0,164,220,.22)');
             var TICK_NORMAL  = 'width:22px; height:22px; border-radius:50%; flex-shrink:0;' +
                                'display:flex; align-items:center; justify-content:center;' +
                                'font-size:13px; margin-left:16px;' +
                                'border:2px solid rgba(255,255,255,.22); color:transparent;';
-            var TICK_HIDDEN  = 'width:22px; height:22px; border-radius:50%; flex-shrink:0;' +
+            var TICK_ON      = 'width:22px; height:22px; border-radius:50%; flex-shrink:0;' +
                                'display:flex; align-items:center; justify-content:center;' +
                                'font-size:13px; margin-left:16px;' +
                                'background:#00a4dc; border:2px solid #00a4dc; color:#fff;';
 
-            function updateStatus() {
-                var n = document.querySelectorAll('.ghost-cb:checked').length;
-                document.getElementById('ghostStatus').textContent =
-                    n === 0 ? 'No libraries hidden' :
-                    n === 1 ? '1 library hidden'    :
-                              n + ' libraries hidden';
-            }
-
-            /* Builds one card element — all styling via inline styles */
-            function makeCard(lib, hidden) {
-                var typeKey   = (lib.CollectionType || 'mixed').toLowerCase();
-                var icon      = TYPE_ICONS[typeKey]  || '📁';
-                var typeLabel = TYPE_LABELS[typeKey] || lib.CollectionType || 'Mixed';
-
-                /* Wrapper <label> — full row is the click target */
+            /* ── Toggle card factory (used for both options and libraries) ─ */
+            function makeToggleCard(icon, title, subtitle, isOn, onChangeCb) {
                 var card = document.createElement('label');
-                card.style.cssText = hidden ? CARD_HIDDEN : CARD_NORMAL;
+                card.style.cssText = isOn ? CARD_ON : CARD_NORMAL;
 
-                /* Hidden native checkbox (invisible but drives state) */
                 var cb = document.createElement('input');
                 cb.type = 'checkbox';
-                cb.className = 'ghost-cb';
-                cb.dataset.libraryId = lib.ItemId;
-                cb.checked = hidden;
+                cb.checked = isOn;
                 cb.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
 
-                /* Icon bubble */
                 var iconEl = document.createElement('div');
-                iconEl.style.cssText = hidden ? ICON_HIDDEN : ICON_NORMAL;
+                iconEl.style.cssText = isOn ? ICON_ON : ICON_NORMAL;
                 iconEl.textContent = icon;
 
-                /* Text block */
                 var info = document.createElement('div');
                 info.style.cssText = 'flex:1; min-width:0;';
 
                 var nameEl = document.createElement('div');
                 nameEl.style.cssText = 'font-size:1em; font-weight:500;' +
                     'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-                nameEl.textContent = lib.Name;
+                nameEl.textContent = title;
 
-                var typeEl = document.createElement('div');
-                typeEl.style.cssText = 'font-size:.78em; opacity:.5; margin-top:2px; text-transform:capitalize;';
-                typeEl.textContent = typeLabel;
+                var subEl = document.createElement('div');
+                subEl.style.cssText = 'font-size:.78em; opacity:.5; margin-top:2px;';
+                subEl.textContent = subtitle;
 
                 info.appendChild(nameEl);
-                info.appendChild(typeEl);
+                if (subtitle) info.appendChild(subEl);
 
-                /* Circle checkmark */
                 var tick = document.createElement('div');
-                tick.style.cssText = hidden ? TICK_HIDDEN : TICK_NORMAL;
-                tick.textContent   = hidden ? '✓' : '';
+                tick.style.cssText = isOn ? TICK_ON : TICK_NORMAL;
+                tick.textContent   = isOn ? '✓' : '';
+
+                cb.addEventListener('change', function () {
+                    var on = this.checked;
+                    card.style.cssText   = on ? CARD_ON    : CARD_NORMAL;
+                    iconEl.style.cssText = on ? ICON_ON    : ICON_NORMAL;
+                    tick.style.cssText   = on ? TICK_ON    : TICK_NORMAL;
+                    tick.textContent     = on ? '✓' : '';
+                    if (onChangeCb) onChangeCb(on);
+                });
 
                 card.appendChild(cb);
                 card.appendChild(iconEl);
                 card.appendChild(info);
                 card.appendChild(tick);
+                return { root: card, checkbox: cb };
+            }
 
-                /* Toggle styles on change */
-                cb.addEventListener('change', function () {
-                    var on = this.checked;
-                    card.style.cssText   = on ? CARD_HIDDEN  : CARD_NORMAL;
-                    iconEl.style.cssText = on ? ICON_HIDDEN  : ICON_NORMAL;
-                    tick.style.cssText   = on ? TICK_HIDDEN  : TICK_NORMAL;
-                    tick.textContent     = on ? '✓' : '';
-                    updateStatus();
-                });
+            /* ── Option cards ────────────────────────────────────────────── */
+            var optAdmins  = null;
+            var optContent = null;
 
-                return card;
+            function renderOptions(config) {
+                var container = document.getElementById('ghostOptions');
+                container.innerHTML = '';
+
+                optAdmins = makeToggleCard(
+                    '🛡️',
+                    'Admins always see all libraries',
+                    'Administrators bypass the hidden list and see every library.',
+                    config.VisibleToAdmins !== false
+                );
+                optContent = makeToggleCard(
+                    '🔍',
+                    'Hide content from hidden libraries',
+                    'Also removes items from "Latest Added", "Continue Watching" and "Next Up".',
+                    config.FilterContentItems !== false
+                );
+                container.appendChild(optAdmins.root);
+                container.appendChild(optContent.root);
+            }
+
+            /* ── Library cards ───────────────────────────────────────────── */
+            function updateStatus() {
+                var n = document.querySelectorAll('.ghost-lib-cb:checked').length;
+                document.getElementById('ghostStatus').textContent =
+                    n === 0 ? 'No libraries hidden' :
+                    n === 1 ? '1 library hidden'    :
+                              n + ' libraries hidden';
             }
 
             function renderLibraries(libraries, hiddenIds) {
@@ -176,12 +197,24 @@
                 }
 
                 libraries.forEach(function (lib) {
-                    list.appendChild(makeCard(lib, hiddenIds.indexOf(lib.ItemId) !== -1));
+                    var hidden    = hiddenIds.indexOf(lib.ItemId) !== -1;
+                    var typeKey   = (lib.CollectionType || 'mixed').toLowerCase();
+                    var card = makeToggleCard(
+                        TYPE_ICONS[typeKey]  || '📁',
+                        lib.Name,
+                        TYPE_LABELS[typeKey] || lib.CollectionType || 'Mixed',
+                        hidden
+                    );
+                    card.checkbox.className = 'ghost-lib-cb';
+                    card.checkbox.dataset.libraryId = lib.ItemId;
+                    card.checkbox.addEventListener('change', updateStatus);
+                    list.appendChild(card.root);
                 });
+
                 updateStatus();
             }
 
-            /* ── Load config + library list in parallel, then render ── */
+            /* ── Bootstrap ───────────────────────────────────────────────── */
             document.getElementById('GhostLibraryConfigPage')
                 .addEventListener('pageshow', function () {
                     Dashboard.showLoadingMsg();
@@ -189,7 +222,10 @@
                         ApiClient.getPluginConfiguration(PLUGIN_ID),
                         ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
                     ]).then(function (r) {
-                        renderLibraries(r[1], r[0].HiddenLibraryIds || []);
+                        var config    = r[0];
+                        var libraries = r[1];
+                        renderOptions(config);
+                        renderLibraries(libraries, config.HiddenLibraryIds || []);
                         Dashboard.hideLoadingMsg();
                     }).catch(function () {
                         document.getElementById('ghostList').innerHTML =
@@ -198,19 +234,21 @@
                     });
                 });
 
-            /* ── Save ─────────────────────────────────────────────── */
+            /* ── Save ────────────────────────────────────────────────────── */
             document.getElementById('GhostLibraryConfigForm')
                 .addEventListener('submit', function (e) {
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
 
                     var ids = Array.prototype.slice
-                        .call(document.querySelectorAll('.ghost-cb:checked'))
+                        .call(document.querySelectorAll('.ghost-lib-cb:checked'))
                         .map(function (cb) { return cb.dataset.libraryId; });
 
                     ApiClient.getPluginConfiguration(PLUGIN_ID)
                         .then(function (cfg) {
-                            cfg.HiddenLibraryIds = ids;
+                            cfg.HiddenLibraryIds    = ids;
+                            cfg.VisibleToAdmins     = optAdmins  && optAdmins.checkbox.checked;
+                            cfg.FilterContentItems  = optContent && optContent.checkbox.checked;
                             return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg);
                         })
                         .then(function (result) {

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Querying;
 using Microsoft.AspNetCore.Mvc;
@@ -13,29 +15,38 @@ using Microsoft.AspNetCore.Mvc.Filters;
 namespace Jellyfin.Plugin.GhostLibrary.Filters;
 
 /// <summary>
-/// Global ASP.NET Core action filter that removes all configured hidden libraries
-/// from <see cref="QueryResult{T}"/> responses before they are serialized and
-/// sent to clients.
+/// Global ASP.NET Core action filter that removes configured hidden libraries —
+/// and optionally their content — from <see cref="QueryResult{T}"/> API responses.
 ///
-/// This filter intercepts the two endpoints that expose library lists:
+/// Intercepted endpoints:
 /// <list type="bullet">
-///   <item><description>GET /Users/{userId}/Views</description></item>
-///   <item><description>GET /Items (when returning CollectionFolder items)</description></item>
+///   <item><description>GET /Users/{userId}/Views — library tiles</description></item>
+///   <item><description>GET /Items — generic item queries (Latest, Resume, Next Up, …)</description></item>
 /// </list>
 ///
-/// Internal access via <c>ILibraryManager</c> (used by Cinema Mode and similar
-/// plugins) is never affected — only outgoing HTTP responses are modified.
+/// Internal <c>ILibraryManager</c> access (Cinema Mode etc.) is never affected.
 /// </summary>
 public class GhostLibraryFilter : IAsyncActionFilter
 {
+    private readonly ILibraryManager _libraryManager;
+    private readonly IUserManager _userManager;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GhostLibraryFilter"/> class.
+    /// </summary>
+    public GhostLibraryFilter(ILibraryManager libraryManager, IUserManager userManager)
+    {
+        _libraryManager = libraryManager;
+        _userManager = userManager;
+    }
+
     /// <inheritdoc />
     public async Task OnActionExecutionAsync(
         ActionExecutingContext context,
         ActionExecutionDelegate next)
     {
-        // Pre-execution: strip conditional GET headers for /Views requests.
-        // Without this, Jellyfin may return a "304 Not Modified" with an empty body,
-        // bypassing the filter and letting the client use its stale cached response.
+        // Strip conditional GET headers on /Views so Jellyfin cannot short-circuit
+        // with a 304 that bypasses this filter.
         var path = context.HttpContext.Request.Path.Value ?? string.Empty;
         if (path.EndsWith("/Views", StringComparison.OrdinalIgnoreCase))
         {
@@ -66,21 +77,37 @@ public class GhostLibraryFilter : IAsyncActionFilter
             return;
         }
 
-        // Build a HashSet<Guid> for O(1) lookups; skip invalid/empty entries.
+        // ── Admin bypass ──────────────────────────────────────────────────────
+        // When enabled, admins always see every library regardless of the hidden list.
+        if (config.VisibleToAdmins)
+        {
+            var userIdValue = context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdValue is not null && Guid.TryParse(userIdValue, out var requestingUserId))
+            {
+                var user = _userManager.GetUserById(requestingUserId);
+                if (user?.HasPermission(PermissionKind.IsAdministrator) == true)
+                {
+                    return;
+                }
+            }
+        }
+
+        // ── Build hidden-ID lookup ────────────────────────────────────────────
         var hiddenIds = new HashSet<Guid>(
             (config.HiddenLibraryIds ?? Array.Empty<string>())
-            .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
-            .Select(s => Guid.Parse(s)));
+                .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
+                .Select(s => Guid.Parse(s)));
 
         if (hiddenIds.Count == 0)
         {
             return;
         }
 
+        // ── Filter items ──────────────────────────────────────────────────────
         var filtered = new List<BaseItemDto>(queryResult.Items.Count);
         foreach (var item in queryResult.Items)
         {
-            if (!ShouldHide(item, hiddenIds))
+            if (!ShouldHide(item, hiddenIds, config.FilterContentItems))
             {
                 filtered.Add(item);
             }
@@ -94,20 +121,63 @@ public class GhostLibraryFilter : IAsyncActionFilter
         queryResult.Items = filtered;
         queryResult.TotalRecordCount = filtered.Count;
 
-        // Replace the ETag so clients don't serve a stale (unfiltered) cached response.
         executedContext.HttpContext.Response.Headers.Remove("ETag");
         executedContext.HttpContext.Response.Headers["ETag"] = ComputeEtag(filtered);
     }
 
-    private static bool ShouldHide(BaseItemDto item, HashSet<Guid> hiddenIds)
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="item"/> should be
+    /// removed from the response.
+    /// </summary>
+    private bool ShouldHide(BaseItemDto item, HashSet<Guid> hiddenIds, bool filterContent)
     {
-        // CollectionFolder items are the library roots shown in the client.
-        if (item.Type != BaseItemKind.CollectionFolder)
+        // Library tile — direct ID match.
+        if (item.Type == BaseItemKind.CollectionFolder)
+        {
+            return hiddenIds.Contains(item.Id);
+        }
+
+        // Media item — check if it lives inside a hidden library.
+        if (!filterContent)
         {
             return false;
         }
 
-        return hiddenIds.Contains(item.Id);
+        return IsInsideHiddenLibrary(item.Id, hiddenIds);
+    }
+
+    /// <summary>
+    /// Walks the parent chain of <paramref name="itemId"/> until a root
+    /// CollectionFolder is found. Returns <see langword="true"/> if that
+    /// root is in <paramref name="hiddenIds"/>.
+    /// ILibraryManager caches items in memory, so the traversal is fast.
+    /// </summary>
+    private bool IsInsideHiddenLibrary(Guid itemId, HashSet<Guid> hiddenIds)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return false;
+        }
+
+        var parentId = item.ParentId;
+        while (parentId != Guid.Empty)
+        {
+            if (hiddenIds.Contains(parentId))
+            {
+                return true;
+            }
+
+            var parent = _libraryManager.GetItemById(parentId);
+            if (parent is null)
+            {
+                break;
+            }
+
+            parentId = parent.ParentId;
+        }
+
+        return false;
     }
 
     private static string ComputeEtag(IReadOnlyList<BaseItemDto> items)

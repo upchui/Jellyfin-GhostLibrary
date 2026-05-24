@@ -58,8 +58,8 @@
                         <h3 class="sectionTitle" style="font-size:1em">Schedule (optional)</h3>
                     </div>
                     <p style="opacity:.6; font-size:.85em; margin-bottom:.8em">
-                        Set a time window during which each hidden library is active.
-                        Leave blank to hide at all times.
+                        Per-library rules for when hiding is active. All conditions are ANDed.
+                        Leave everything blank to hide at all times.
                     </p>
                     <div id="ghostScheduleList"
                          style="display:flex; flex-direction:column; gap:12px; margin-bottom:1.75em">
@@ -315,10 +315,12 @@
             }
 
             var currentScheduleRules=[];
+            var INPUT_S='background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:inherit;padding:5px 8px;font-size:.88em;';
+            var DAY_ON='width:40px;height:40px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.75em;font-weight:700;background:rgba(0,164,220,.28);border:1.5px solid #00a4dc;color:#00a4dc;cursor:pointer;user-select:none;';
+            var DAY_OFF='width:40px;height:40px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.75em;font-weight:700;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.14);opacity:.55;cursor:pointer;user-select:none;';
+            var SEC_HDR='font-size:.75em;font-weight:700;color:#00a4dc;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;';
 
-            function refreshSchedule() {
-                renderSchedule(currentScheduleRules);
-            }
+            function refreshSchedule() { renderSchedule(currentScheduleRules); }
 
             function renderSchedule(rules) {
                 currentScheduleRules=rules;
@@ -330,34 +332,101 @@
                     container.innerHTML='<p style="opacity:.4;font-size:.85em">No libraries in Hidden mode — schedules only apply to Hidden libraries.</p>';
                     return;
                 }
-                hiddenLibs.forEach(function(libId) {
+                hiddenLibs.forEach(function(libId){
                     var lib=allLibraries.find(function(l){return l.ItemId===libId;})||{};
-                    var rule=ruleMap[libId]||{HideFrom:'',HideUntil:''};
+                    var rule=ruleMap[libId]||{};
                     var typeKey=(lib.CollectionType||'mixed').toLowerCase();
-                    var row=document.createElement('div');
-                    row.style.cssText='display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);';
-                    var iconEl=document.createElement('div');
-                    iconEl.style.cssText='width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(255,255,255,.08);';
-                    iconEl.textContent=TYPE_ICONS[typeKey]||'📁';
-                    var nameEl=document.createElement('div'); nameEl.style.cssText='flex:1;font-size:.95em;font-weight:500;'; nameEl.textContent=lib.Name||libId;
-                    var fromLabel=document.createElement('span'); fromLabel.style.cssText='font-size:.8em;opacity:.55;white-space:nowrap;'; fromLabel.textContent='From';
-                    var fromInput=document.createElement('input'); fromInput.type='time'; fromInput.value=rule.HideFrom||''; fromInput.dataset.libraryId=libId; fromInput.dataset.field='from'; fromInput.className='ghost-schedule-input';
-                    fromInput.style.cssText='background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:inherit;padding:4px 8px;font-size:.9em;width:100px;';
-                    var untilLabel=document.createElement('span'); untilLabel.style.cssText='font-size:.8em;opacity:.55;white-space:nowrap;'; untilLabel.textContent='Until';
-                    var untilInput=document.createElement('input'); untilInput.type='time'; untilInput.value=rule.HideUntil||''; untilInput.dataset.libraryId=libId; untilInput.dataset.field='until'; untilInput.className='ghost-schedule-input';
-                    untilInput.style.cssText=fromInput.style.cssText;
-                    row.appendChild(iconEl); row.appendChild(nameEl); row.appendChild(fromLabel); row.appendChild(fromInput); row.appendChild(untilLabel); row.appendChild(untilInput);
-                    container.appendChild(row);
+                    var activeDays=rule.ActiveDays||[];
+                    while(activeDays.length<7) activeDays.push(false);
+
+                    /* card */
+                    var card=document.createElement('div');
+                    card.style.cssText='padding:18px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);';
+                    card.className='ghost-schedule-card';
+                    card.dataset.libraryId=libId;
+
+                    /* header */
+                    var hdr=document.createElement('div');
+                    hdr.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:18px;';
+                    var ico=document.createElement('div');
+                    ico.style.cssText='width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(0,164,220,.2);';
+                    ico.textContent=TYPE_ICONS[typeKey]||'📁';
+                    var nm=document.createElement('div');
+                    nm.style.cssText='font-size:.97em;font-weight:600;';
+                    nm.textContent=lib.Name||libId;
+                    hdr.appendChild(ico); hdr.appendChild(nm); card.appendChild(hdr);
+
+                    /* ── Date Range ── */
+                    var drHdr=document.createElement('div'); drHdr.style.cssText=SEC_HDR; drHdr.textContent='Date Range'; card.appendChild(drHdr);
+
+                    var drGrid=document.createElement('div');
+                    drGrid.style.cssText='display:grid;grid-template-columns:80px 1fr;gap:8px 10px;align-items:center;margin-bottom:18px;';
+
+                    var lbFrom=document.createElement('span'); lbFrom.style.cssText='font-size:.83em;opacity:.6;'; lbFrom.textContent='From Date:';
+                    var inFromDate=document.createElement('input'); inFromDate.type='date'; inFromDate.value=rule.ActiveFrom||''; inFromDate.className='ghost-sched-from-date'; inFromDate.style.cssText=INPUT_S+'width:150px;';
+
+                    var lbUntil=document.createElement('span'); lbUntil.style.cssText='font-size:.83em;opacity:.6;'; lbUntil.textContent='Until Date:';
+                    var untilWrap=document.createElement('div'); untilWrap.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+                    var inUntilDate=document.createElement('input'); inUntilDate.type='date'; inUntilDate.value=rule.ActiveUntil||''; inUntilDate.className='ghost-sched-until-date'; inUntilDate.style.cssText=INPUT_S+'width:150px;';
+                    var noEndLbl=document.createElement('label');
+                    noEndLbl.style.cssText='display:flex;align-items:center;gap:5px;font-size:.8em;opacity:.65;cursor:pointer;white-space:nowrap;';
+                    var noEndCb=document.createElement('input'); noEndCb.type='checkbox'; noEndCb.className='ghost-sched-no-end'; noEndCb.style.cssText='margin:0;';
+                    noEndCb.checked=!rule.ActiveUntil;
+                    (function(iu,cb){
+                        function sync(){ iu.disabled=cb.checked; iu.style.opacity=cb.checked?'.3':'1'; if(cb.checked)iu.value=''; }
+                        cb.addEventListener('change',sync); sync();
+                    })(inUntilDate,noEndCb);
+                    noEndLbl.appendChild(noEndCb); noEndLbl.appendChild(document.createTextNode('No end date (permanent)'));
+                    untilWrap.appendChild(inUntilDate); untilWrap.appendChild(noEndLbl);
+
+                    drGrid.appendChild(lbFrom); drGrid.appendChild(inFromDate);
+                    drGrid.appendChild(lbUntil); drGrid.appendChild(untilWrap);
+                    card.appendChild(drGrid);
+
+                    /* ── Weekly Schedule ── */
+                    var wsHdr=document.createElement('div'); wsHdr.style.cssText=SEC_HDR; wsHdr.textContent='Weekly Schedule'; card.appendChild(wsHdr);
+
+                    var daysRow=document.createElement('div');
+                    daysRow.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;';
+                    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(day,i){
+                        var lbl=document.createElement('div');
+                        lbl.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;';
+                        var box=document.createElement('div'); box.style.cssText=activeDays[i]?DAY_ON:DAY_OFF; box.textContent=day;
+                        var cb=document.createElement('input'); cb.type='checkbox'; cb.className='ghost-sched-day'; cb.dataset.dayIndex=i; cb.checked=activeDays[i]; cb.style.display='none';
+                        box.addEventListener('click',function(){ cb.checked=!cb.checked; box.style.cssText=cb.checked?DAY_ON:DAY_OFF; });
+                        lbl.appendChild(box); lbl.appendChild(cb); daysRow.appendChild(lbl);
+                    });
+                    card.appendChild(daysRow);
+
+                    /* ── Daily Time ── */
+                    var timeHdr=document.createElement('div'); timeHdr.style.cssText=SEC_HDR; timeHdr.textContent='Daily Time Window'; card.appendChild(timeHdr);
+
+                    var timeRow=document.createElement('div');
+                    timeRow.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+                    var lbFT=document.createElement('span'); lbFT.style.cssText='font-size:.83em;opacity:.6;white-space:nowrap;'; lbFT.textContent='From:';
+                    var inFromTime=document.createElement('input'); inFromTime.type='time'; inFromTime.value=rule.HideFrom||''; inFromTime.className='ghost-sched-from-time'; inFromTime.style.cssText=INPUT_S+'width:110px;';
+                    var lbUT=document.createElement('span'); lbUT.style.cssText='font-size:.83em;opacity:.6;white-space:nowrap;'; lbUT.textContent='Until:';
+                    var inUntilTime=document.createElement('input'); inUntilTime.type='time'; inUntilTime.value=rule.HideUntil||''; inUntilTime.className='ghost-sched-until-time'; inUntilTime.style.cssText=INPUT_S+'width:110px;';
+                    timeRow.appendChild(lbFT); timeRow.appendChild(inFromTime); timeRow.appendChild(lbUT); timeRow.appendChild(inUntilTime);
+                    card.appendChild(timeRow);
+
+                    container.appendChild(card);
                 });
             }
 
             function collectScheduleRules() {
                 var rules=[];
-                document.querySelectorAll('.ghost-schedule-input[data-field="from"]').forEach(function(fromEl){
-                    var libId=fromEl.dataset.libraryId;
-                    var untilEl=document.querySelector('.ghost-schedule-input[data-library-id="'+libId+'"][data-field="until"]');
-                    var from=fromEl.value.trim(), until=untilEl?untilEl.value.trim():'';
-                    if(from||until) rules.push({LibraryId:libId,HideFrom:from,HideUntil:until});
+                document.querySelectorAll('.ghost-schedule-card').forEach(function(card){
+                    var libId=card.dataset.libraryId;
+                    var activeDays=[]; card.querySelectorAll('.ghost-sched-day').forEach(function(cb){ activeDays.push(cb.checked); });
+                    rules.push({
+                        LibraryId:  libId,
+                        ActiveFrom: card.querySelector('.ghost-sched-from-date').value,
+                        ActiveUntil:card.querySelector('.ghost-sched-no-end').checked?'':card.querySelector('.ghost-sched-until-date').value,
+                        ActiveDays: activeDays,
+                        HideFrom:   card.querySelector('.ghost-sched-from-time').value,
+                        HideUntil:  card.querySelector('.ghost-sched-until-time').value
+                    });
                 });
                 return rules;
             }

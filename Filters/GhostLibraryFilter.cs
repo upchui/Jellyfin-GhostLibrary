@@ -137,9 +137,7 @@ public class GhostLibraryFilter : IAsyncActionFilter
         var now = DateTime.Now.TimeOfDay;
 
         var scheduleMap = (config.ScheduleRules ?? Array.Empty<ScheduleRule>())
-            .Where(r => !string.IsNullOrWhiteSpace(r.LibraryId)
-                        && TimeSpan.TryParse(r.HideFrom,  out _)
-                        && TimeSpan.TryParse(r.HideUntil, out _))
+            .Where(r => !string.IsNullOrWhiteSpace(r.LibraryId))
             .ToDictionary(r => r.LibraryId, r => r);
 
         var hiddenIds = new HashSet<Guid>(
@@ -288,12 +286,36 @@ public class GhostLibraryFilter : IAsyncActionFilter
     {
         if (!scheduleMap.TryGetValue(libraryId, out var rule)) return true;
 
-        TimeSpan.TryParse(rule.HideFrom,  out var from);
-        TimeSpan.TryParse(rule.HideUntil, out var until);
+        var today = DateTime.Now;
+
+        // ── Date range ────────────────────────────────────────────────────────
+        if (!string.IsNullOrEmpty(rule.ActiveFrom)
+            && DateTime.TryParse(rule.ActiveFrom, out var activeFrom)
+            && today.Date < activeFrom.Date)
+            return false;
+
+        if (!string.IsNullOrEmpty(rule.ActiveUntil)
+            && DateTime.TryParse(rule.ActiveUntil, out var activeUntil)
+            && today.Date > activeUntil.Date)
+            return false;
+
+        // ── Day of week ───────────────────────────────────────────────────────
+        // ActiveDays[0]=Mon … [6]=Sun; DayOfWeek: Sun=0, Mon=1 … Sat=6
+        var days = rule.ActiveDays;
+        if (days is { Length: 7 } && days.Any(d => d))
+        {
+            var dayIndex = ((int)today.DayOfWeek + 6) % 7;
+            if (!days[dayIndex]) return false;
+        }
+
+        // ── Daily time window ─────────────────────────────────────────────────
+        if (!TimeSpan.TryParse(rule.HideFrom,  out var from)
+            || !TimeSpan.TryParse(rule.HideUntil, out var until))
+            return true; // no time restriction → always hide
 
         return from <= until
             ? now >= from && now <= until
-            : now >= from || now <= until;
+            : now >= from || now <= until; // overnight span
     }
 
     // ── ETag ──────────────────────────────────────────────────────────────────

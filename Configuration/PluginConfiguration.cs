@@ -87,17 +87,28 @@ public class PluginConfiguration : BasePluginConfiguration
 }
 
 /// <summary>
-/// Defines a time-window during which a library is hidden.
-/// Outside this window the library is visible even if it is in the hidden list.
+/// Defines when a library is hidden. All non-empty conditions are ANDed together.
 /// </summary>
 public class ScheduleRule
 {
     /// <summary>Gets or sets the library GUID this rule applies to.</summary>
     public string LibraryId { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the time-of-day to start hiding (e.g. "06:00").</summary>
-    public string HideFrom { get; set; } = "00:00";
+    /// <summary>Gets or sets the first calendar date this rule is active ("yyyy-MM-dd"). Empty = no start limit.</summary>
+    public string ActiveFrom { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the time-of-day to stop hiding (e.g. "22:00").</summary>
-    public string HideUntil { get; set; } = "23:59";
+    /// <summary>Gets or sets the last calendar date this rule is active ("yyyy-MM-dd"). Empty = no end limit (permanent).</summary>
+    public string ActiveUntil { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets which days of the week this rule applies to.
+    /// Index 0 = Monday … 6 = Sunday. All-false or empty array = every day.
+    /// </summary>
+    public bool[] ActiveDays { get; set; } = Array.Empty<bool>();
+
+    /// <summary>Gets or sets the time-of-day to start hiding (e.g. "22:00"). Empty = all day.</summary>
+    public string HideFrom { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the time-of-day to stop hiding (e.g. "06:00"). Empty = all day.</summary>
+    public string HideUntil { get; set; } = string.Empty;
 }

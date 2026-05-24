@@ -94,6 +94,17 @@
                                style="width:100%; box-sizing:border-box;" />
                     </div>
 
+                    <!-- Logging -->
+                    <div class="sectionTitleContainer">
+                        <h3 class="sectionTitle" style="font-size:1em">Logging</h3>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:1.75em;">
+                        <input id="ghostMaxLogEntries" type="number" is="emby-input"
+                               min="10" max="10000" step="10"
+                               style="width:110px; box-sizing:border-box;" />
+                        <span style="opacity:.55; font-size:.85em;">max events kept in memory (10 – 10 000)</span>
+                    </div>
+
                     <!-- Export / Import -->
                     <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Backup</h3>
@@ -125,12 +136,19 @@
                 ════════════════════════════════════════════════════════ -->
                 <div id="tabActivity" style="display:none">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.8em;">
-                        <p style="opacity:.6; font-size:.85em; margin:0">
-                            Last 100 filter events (newest first). Resets on server restart.
-                        </p>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <p style="opacity:.6; font-size:.85em; margin:0">
+                                Filter events (newest first). Resets on server restart.
+                            </p>
+                            <span id="ghostLogLive"
+                                  style="display:inline-flex;align-items:center;gap:5px;font-size:.78em;color:#4caf50;opacity:0;transition:opacity .3s;">
+                                <span style="width:7px;height:7px;border-radius:50%;background:#4caf50;display:inline-block;"></span>
+                                Live
+                            </span>
+                        </div>
                         <button type="button" onclick="clearLog()"
                                 style="background:rgba(255,100,100,.12); border:1px solid rgba(255,100,100,.3); border-radius:4px; padding:6px 14px; cursor:pointer; color:inherit; font-size:.85em;">
-                            Clear log
+                            Clear
                         </button>
                     </div>
                     <div id="ghostLogTable"></div>
@@ -165,6 +183,21 @@
             var TYPE_ICONS = { movies:'🎬',tvshows:'📺',music:'🎵',musicvideos:'🎸',homevideos:'🏠',boxsets:'📦',books:'📚',photos:'📷',mixed:'📁' };
             var TYPE_LABELS = { movies:'Movies',tvshows:'TV Shows',music:'Music',musicvideos:'Music Videos',homevideos:'Home Videos',boxsets:'Collections',books:'Books',photos:'Photos',mixed:'Mixed' };
 
+            /* ── Live refresh ────────────────────────────────────────────── */
+            var logRefreshTimer = null;
+
+            function startLogRefresh() {
+                if (logRefreshTimer) return;
+                document.getElementById('ghostLogLive').style.opacity = '1';
+                logRefreshTimer = setInterval(function () { loadLog(true); }, 3000);
+            }
+
+            function stopLogRefresh() {
+                if (logRefreshTimer) { clearInterval(logRefreshTimer); logRefreshTimer = null; }
+                var liveEl = document.getElementById('ghostLogLive');
+                if (liveEl) liveEl.style.opacity = '0';
+            }
+
             /* ── Tab switching ───────────────────────────────────────────── */
             window.showTab = function (name) {
                 document.getElementById('tabSettings').style.display = name === 'settings' ? '' : 'none';
@@ -177,7 +210,8 @@
                     'background:none;border:none;color:inherit;padding:10px 20px;cursor:pointer;font-size:.95em;border-bottom:2px solid ' +
                     (name === 'activity' ? '#00a4dc' : 'transparent') +
                     ';margin-bottom:-2px;font-weight:' + (name === 'activity' ? '600' : '400') + ';opacity:' + (name === 'activity' ? '1' : '.6') + ';';
-                if (name === 'activity') loadLog();
+                if (name === 'activity') { loadLog(); startLogRefresh(); }
+                else { stopLogRefresh(); }
             };
 
             /* ── Toggle card factory ─────────────────────────────────────── */
@@ -329,9 +363,9 @@
             }
 
             /* ── Activity log ────────────────────────────────────────────── */
-            function loadLog() {
+            function loadLog(silent) {
                 var table=document.getElementById('ghostLogTable');
-                table.innerHTML='<p style="opacity:.5">Loading…</p>';
+                if(!silent) table.innerHTML='<p style="opacity:.5">Loading…</p>';
                 ApiClient.getJSON(ApiClient.getUrl('GhostLibrary/Log'))
                     .then(function(entries){
                         if(!entries||!entries.length){
@@ -348,7 +382,7 @@
                             '</tr></thead><tbody>';
                         entries.forEach(function(e){
                             var t=new Date(e.Timestamp).toLocaleTimeString();
-                            var ua=e.UserAgent||''; if(ua.length>30)ua=ua.slice(0,30)+'…';
+                            var ua=e.UserAgent||''; if(ua.length>40)ua=ua.slice(0,40)+'…';
                             var removed=e.ItemsRemoved>0?'<span style="color:#e57373">-'+e.ItemsRemoved+'</span>':'0';
                             var note=e.SkippedReason?'<span style="opacity:.45">'+e.SkippedReason+'</span>':'';
                             html+='<tr style="border-bottom:1px solid rgba(255,255,255,.05);">' +
@@ -362,7 +396,7 @@
                         html+='</tbody></table>';
                         table.innerHTML=html;
                     }).catch(function(){
-                        table.innerHTML='<p style="color:#e53935">Failed to load log.</p>';
+                        if(!silent) table.innerHTML='<p style="color:#e53935">Failed to load log.</p>';
                     });
             }
 
@@ -400,6 +434,9 @@
 
             /* ── Bootstrap ───────────────────────────────────────────────── */
             document.getElementById('GhostLibraryConfigPage')
+                .addEventListener('pagehide', function() { stopLogRefresh(); });
+
+            document.getElementById('GhostLibraryConfigPage')
                 .addEventListener('pageshow', function() {
                     Dashboard.showLoadingMsg();
                     Promise.all([
@@ -412,6 +449,7 @@
                         renderSchedule(config.ScheduleRules||[]);
                         document.getElementById('ghostBlockedClients').value=config.BlockedClients||'';
                         document.getElementById('ghostWebhookUrl').value=config.WebhookUrl||'';
+                        document.getElementById('ghostMaxLogEntries').value=config.MaxLogEntries||100;
                         Dashboard.hideLoadingMsg();
                     }).catch(function(){
                         document.getElementById('ghostLibList').innerHTML='<p style="color:#e53935">Failed to load libraries.</p>';
@@ -438,6 +476,7 @@
                         cfg.ScheduleRules      = collectScheduleRules();
                         cfg.BlockedClients     = document.getElementById('ghostBlockedClients').value.trim();
                         cfg.WebhookUrl         = document.getElementById('ghostWebhookUrl').value.trim();
+                        cfg.MaxLogEntries      = Math.max(10, parseInt(document.getElementById('ghostMaxLogEntries').value, 10) || 100);
                         return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg);
                     }).then(function(result){
                         Dashboard.processPluginConfigurationUpdateResult(result);

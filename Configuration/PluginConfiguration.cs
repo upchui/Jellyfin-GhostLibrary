@@ -76,6 +76,14 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Leave empty to disable. Useful for Home Assistant automations.
     /// </summary>
     public string WebhookUrl { get; set; } = string.Empty;
+
+    // ── Logging ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets or sets the maximum number of filter events kept in the in-memory log.
+    /// Oldest entries are dropped when the buffer is full.
+    /// </summary>
+    public int MaxLogEntries { get; set; } = 100;
 }
 
 /// <summary>

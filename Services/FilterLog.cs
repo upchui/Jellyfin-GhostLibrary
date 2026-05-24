@@ -33,17 +33,18 @@ public class FilterLogEntry
 /// </summary>
 public class FilterLog
 {
-    private const int Capacity = 100;
-
     private readonly Queue<FilterLogEntry> _entries = new();
     private readonly object _lock = new();
+
+    private static int Capacity => Math.Max(10, Plugin.Instance?.Configuration.MaxLogEntries ?? 100);
 
     /// <summary>Records a new filter event, dropping the oldest entry when full.</summary>
     public void Add(FilterLogEntry entry)
     {
         lock (_lock)
         {
-            if (_entries.Count >= Capacity)
+            var cap = Capacity;
+            while (_entries.Count >= cap)
             {
                 _entries.Dequeue();
             }

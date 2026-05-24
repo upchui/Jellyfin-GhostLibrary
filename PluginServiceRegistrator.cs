@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.GhostLibrary.Filters;
+using Jellyfin.Plugin.GhostLibrary.Services;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.AspNetCore.Mvc;
@@ -8,8 +9,6 @@ namespace Jellyfin.Plugin.GhostLibrary;
 
 /// <summary>
 /// Registers GhostLibrary services with Jellyfin's dependency injection container.
-/// Jellyfin discovers this class via reflection at startup and calls
-/// <see cref="RegisterServices"/> before the HTTP pipeline is active.
 /// </summary>
 public class PluginServiceRegistrator : IPluginServiceRegistrator
 {
@@ -18,12 +17,14 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         IServiceCollection serviceCollection,
         IServerApplicationHost applicationHost)
     {
-        // Register the filter as scoped so MVC can resolve it from DI per-request
-        // when using typed filter registration (Filters.Add<T>()).
+        // Singletons — shared across all requests
+        serviceCollection.AddSingleton<FilterLog>();
+        serviceCollection.AddSingleton<WebhookService>();
+
+        // Scoped filter — one instance per request, resolved from DI
         serviceCollection.AddScoped<GhostLibraryFilter>();
 
-        // PostConfigure runs after ALL Configure<MvcOptions> calls — including
-        // Jellyfin's own AddJellyfinApi() — so the filter is always appended last.
+        // PostConfigure runs after ALL Jellyfin MVC configuration
         serviceCollection.PostConfigure<MvcOptions>(options =>
         {
             options.Filters.Add<GhostLibraryFilter>();

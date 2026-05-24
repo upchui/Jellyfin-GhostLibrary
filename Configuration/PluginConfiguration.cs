@@ -17,12 +17,19 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </summary>
     public bool IsEnabled { get; set; } = true;
 
-    // ── Hidden libraries ──────────────────────────────────────────────────────
+    // ── Hidden / stealth libraries ────────────────────────────────────────────
 
     /// <summary>
-    /// Gets or sets the GUIDs of the top-level libraries to hide.
+    /// Gets or sets the GUIDs of the top-level libraries to hide completely.
     /// </summary>
     public string[] HiddenLibraryIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets or sets the GUIDs of libraries to show in "stealth" mode:
+    /// the tile is kept but <c>ChildCount</c> is set to 0 so it appears empty.
+    /// Content items belonging to stealth libraries are filtered from aggregated rows.
+    /// </summary>
+    public string[] StealthLibraryIds { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Gets or sets the GUIDs of individual sub-folders or items to hide
@@ -40,8 +47,8 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>
     /// Gets or sets a value indicating whether individual media items that
-    /// belong to a hidden library are also removed from aggregated responses
-    /// (Latest Added, Continue Watching, Next Up).
+    /// belong to a hidden or stealth library are also removed from aggregated
+    /// responses (Latest Added, Continue Watching, Next Up).
     /// </summary>
     public bool FilterContentItems { get; set; } = true;
 
@@ -58,10 +65,17 @@ public class PluginConfiguration : BasePluginConfiguration
 
     /// <summary>
     /// Gets or sets the per-library schedule rules.
-    /// Each entry maps a library GUID to a <see cref="ScheduleRule"/>.
     /// Libraries without a rule are always hidden (when selected).
     /// </summary>
     public ScheduleRule[] ScheduleRules { get; set; } = Array.Empty<ScheduleRule>();
+
+    // ── Webhook ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets or sets the URL to POST to when the plugin configuration changes.
+    /// Leave empty to disable. Useful for Home Assistant automations.
+    /// </summary>
+    public string WebhookUrl { get; set; } = string.Empty;
 }
 
 /// <summary>

@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.GhostLibrary.Configuration;
+using Jellyfin.Plugin.GhostLibrary.Services;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Querying;
@@ -16,19 +17,21 @@ using Microsoft.AspNetCore.Mvc.Filters;
 namespace Jellyfin.Plugin.GhostLibrary.Filters;
 
 /// <summary>
-/// Global ASP.NET Core action filter that removes configured hidden libraries —
-/// and optionally their content — from <see cref="QueryResult{T}"/> API responses.
+/// Global ASP.NET Core action filter that removes or empties configured libraries
+/// from <see cref="QueryResult{T}"/> API responses before they reach the client.
 /// </summary>
 public class GhostLibraryFilter : IAsyncActionFilter
 {
     private readonly ILibraryManager _libraryManager;
+    private readonly FilterLog _log;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GhostLibraryFilter"/> class.
     /// </summary>
-    public GhostLibraryFilter(ILibraryManager libraryManager)
+    public GhostLibraryFilter(ILibraryManager libraryManager, FilterLog log)
     {
         _libraryManager = libraryManager;
+        _log = log;
     }
 
     /// <inheritdoc />
@@ -36,9 +39,11 @@ public class GhostLibraryFilter : IAsyncActionFilter
         ActionExecutingContext context,
         ActionExecutionDelegate next)
     {
-        // Strip conditional GET headers on /Views so Jellyfin cannot short-circuit
-        // with a 304 that bypasses this filter.
-        var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+        var path      = context.HttpContext.Request.Path.Value ?? string.Empty;
+        var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
+
+        // Strip conditional GET headers on /Views so Jellyfin cannot return 304
+        // which would bypass this filter entirely.
         if (path.EndsWith("/Views", StringComparison.OrdinalIgnoreCase))
         {
             context.HttpContext.Request.Headers.Remove("If-None-Match");
@@ -71,21 +76,36 @@ public class GhostLibraryFilter : IAsyncActionFilter
         // ── Master switch ─────────────────────────────────────────────────────
         if (!config.IsEnabled)
         {
+            _log.Add(new FilterLogEntry
+            {
+                Timestamp     = DateTime.UtcNow,
+                Path          = path,
+                UserAgent     = userAgent,
+                ItemsRemoved  = 0,
+                ItemsKept     = queryResult.Items.Count,
+                SkippedReason = "Plugin disabled"
+            });
             return;
         }
 
         // ── Client filter ─────────────────────────────────────────────────────
-        // If BlockedClients is non-empty, only filter requests whose User-Agent
-        // contains at least one of the configured substrings (case-insensitive).
         if (!string.IsNullOrWhiteSpace(config.BlockedClients))
         {
-            var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
             var tokens = config.BlockedClients
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var isBlocked = tokens.Any(t =>
                 userAgent.Contains(t, StringComparison.OrdinalIgnoreCase));
             if (!isBlocked)
             {
+                _log.Add(new FilterLogEntry
+                {
+                    Timestamp     = DateTime.UtcNow,
+                    Path          = path,
+                    UserAgent     = userAgent,
+                    ItemsRemoved  = 0,
+                    ItemsKept     = queryResult.Items.Count,
+                    SkippedReason = "Client not in blocked list"
+                });
                 return;
             }
         }
@@ -94,24 +114,36 @@ public class GhostLibraryFilter : IAsyncActionFilter
         if (config.VisibleToAdmins
             && context.HttpContext.User.HasClaim(ClaimTypes.Role, "Administrator"))
         {
+            _log.Add(new FilterLogEntry
+            {
+                Timestamp     = DateTime.UtcNow,
+                Path          = path,
+                UserAgent     = userAgent,
+                ItemsRemoved  = 0,
+                ItemsKept     = queryResult.Items.Count,
+                SkippedReason = "Admin user"
+            });
             return;
         }
 
-        // ── Build hidden-ID sets ──────────────────────────────────────────────
+        // ── Build ID sets ─────────────────────────────────────────────────────
         var now = DateTime.Now.TimeOfDay;
 
-        // Respect per-library schedule: remove IDs whose hide-window does NOT
-        // cover the current time (i.e. the library should be visible right now).
         var scheduleMap = (config.ScheduleRules ?? Array.Empty<ScheduleRule>())
             .Where(r => !string.IsNullOrWhiteSpace(r.LibraryId)
                         && TimeSpan.TryParse(r.HideFrom,  out _)
                         && TimeSpan.TryParse(r.HideUntil, out _))
             .ToDictionary(r => r.LibraryId, r => r);
 
-        var hiddenLibraryIds = new HashSet<Guid>(
+        var hiddenIds = new HashSet<Guid>(
             (config.HiddenLibraryIds ?? Array.Empty<string>())
                 .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
                 .Where(s => IsActiveSchedule(s, scheduleMap, now))
+                .Select(s => Guid.Parse(s)));
+
+        var stealthIds = new HashSet<Guid>(
+            (config.StealthLibraryIds ?? Array.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
                 .Select(s => Guid.Parse(s)));
 
         var hiddenFolderIds = new HashSet<Guid>(
@@ -119,22 +151,43 @@ public class GhostLibraryFilter : IAsyncActionFilter
                 .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
                 .Select(s => Guid.Parse(s)));
 
-        if (hiddenLibraryIds.Count == 0 && hiddenFolderIds.Count == 0)
+        if (hiddenIds.Count == 0 && stealthIds.Count == 0 && hiddenFolderIds.Count == 0)
         {
             return;
         }
 
-        // ── Filter items ──────────────────────────────────────────────────────
+        // ── Filter / mutate items ─────────────────────────────────────────────
         var filtered = new List<BaseItemDto>(queryResult.Items.Count);
         foreach (var item in queryResult.Items)
         {
-            if (!ShouldHide(item, hiddenLibraryIds, hiddenFolderIds, config.FilterContentItems))
+            var action = GetAction(item, hiddenIds, stealthIds, hiddenFolderIds,
+                                   config.FilterContentItems);
+            switch (action)
             {
-                filtered.Add(item);
+                case ItemAction.Remove:
+                    break; // skip
+                case ItemAction.Stealth:
+                    item.ChildCount = 0;
+                    filtered.Add(item);
+                    break;
+                default:
+                    filtered.Add(item);
+                    break;
             }
         }
 
-        if (filtered.Count == queryResult.Items.Count)
+        var removed = queryResult.Items.Count - filtered.Count;
+
+        _log.Add(new FilterLogEntry
+        {
+            Timestamp    = DateTime.UtcNow,
+            Path         = path,
+            UserAgent    = userAgent,
+            ItemsRemoved = removed,
+            ItemsKept    = filtered.Count
+        });
+
+        if (removed == 0)
         {
             return;
         }
@@ -146,99 +199,79 @@ public class GhostLibraryFilter : IAsyncActionFilter
         executedContext.HttpContext.Response.Headers["ETag"] = ComputeEtag(filtered);
     }
 
-    // ── Schedule helper ───────────────────────────────────────────────────────
+    // ── Item action ───────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Returns <see langword="true"/> when the library should currently be hidden.
-    /// A library with no rule is always hidden. A library whose rule does not cover
-    /// <paramref name="now"/> is visible (not hidden).
-    /// </summary>
-    private static bool IsActiveSchedule(
-        string libraryId,
-        Dictionary<string, ScheduleRule> scheduleMap,
-        TimeSpan now)
-    {
-        if (!scheduleMap.TryGetValue(libraryId, out var rule))
-        {
-            return true; // no rule → always hide
-        }
+    private enum ItemAction { Keep, Remove, Stealth }
 
-        TimeSpan.TryParse(rule.HideFrom,  out var from);
-        TimeSpan.TryParse(rule.HideUntil, out var until);
-
-        // Handle overnight windows (e.g. 22:00 – 06:00)
-        if (from <= until)
-        {
-            return now >= from && now <= until;
-        }
-        else
-        {
-            return now >= from || now <= until;
-        }
-    }
-
-    // ── Item filter ───────────────────────────────────────────────────────────
-
-    private bool ShouldHide(
+    private ItemAction GetAction(
         BaseItemDto item,
-        HashSet<Guid> hiddenLibraryIds,
+        HashSet<Guid> hiddenIds,
+        HashSet<Guid> stealthIds,
         HashSet<Guid> hiddenFolderIds,
         bool filterContent)
     {
-        // Top-level library tile
         if (item.Type == BaseItemKind.CollectionFolder)
         {
-            return hiddenLibraryIds.Contains(item.Id);
+            if (hiddenIds.Contains(item.Id))  return ItemAction.Remove;
+            if (stealthIds.Contains(item.Id)) return ItemAction.Stealth;
+            return ItemAction.Keep;
         }
 
         // Sub-folder hidden directly by ID
         if (hiddenFolderIds.Contains(item.Id))
         {
-            return true;
+            return ItemAction.Remove;
         }
 
-        // Media item inside a hidden library or hidden sub-folder
-        if (filterContent && (hiddenLibraryIds.Count > 0 || hiddenFolderIds.Count > 0))
+        // Media item inside a hidden/stealth library
+        if (filterContent && (hiddenIds.Count > 0 || stealthIds.Count > 0 || hiddenFolderIds.Count > 0))
         {
-            return IsInsideHiddenFolder(item.Id, hiddenLibraryIds, hiddenFolderIds);
+            return GetContentAction(item.Id, hiddenIds, stealthIds, hiddenFolderIds);
         }
 
-        return false;
+        return ItemAction.Keep;
     }
 
-    /// <summary>
-    /// Walks the parent chain. Returns <see langword="true"/> if any ancestor
-    /// is in the hidden-library or hidden-folder set.
-    /// </summary>
-    private bool IsInsideHiddenFolder(
+    private ItemAction GetContentAction(
         Guid itemId,
-        HashSet<Guid> hiddenLibraryIds,
+        HashSet<Guid> hiddenIds,
+        HashSet<Guid> stealthIds,
         HashSet<Guid> hiddenFolderIds)
     {
-        var item = _libraryManager.GetItemById(itemId);
-        if (item is null)
-        {
-            return false;
-        }
+        var current = _libraryManager.GetItemById(itemId);
+        if (current is null) return ItemAction.Keep;
 
-        var parentId = item.ParentId;
+        var parentId = current.ParentId;
         while (parentId != Guid.Empty)
         {
-            if (hiddenLibraryIds.Contains(parentId) || hiddenFolderIds.Contains(parentId))
-            {
-                return true;
-            }
+            if (hiddenIds.Contains(parentId) || hiddenFolderIds.Contains(parentId))
+                return ItemAction.Remove;
+            if (stealthIds.Contains(parentId))
+                return ItemAction.Remove; // content items in stealth libs are also removed
 
             var parent = _libraryManager.GetItemById(parentId);
-            if (parent is null)
-            {
-                break;
-            }
-
+            if (parent is null) break;
             parentId = parent.ParentId;
         }
 
-        return false;
+        return ItemAction.Keep;
+    }
+
+    // ── Schedule helper ───────────────────────────────────────────────────────
+
+    private static bool IsActiveSchedule(
+        string libraryId,
+        Dictionary<string, ScheduleRule> scheduleMap,
+        TimeSpan now)
+    {
+        if (!scheduleMap.TryGetValue(libraryId, out var rule)) return true;
+
+        TimeSpan.TryParse(rule.HideFrom,  out var from);
+        TimeSpan.TryParse(rule.HideUntil, out var until);
+
+        return from <= until
+            ? now >= from && now <= until
+            : now >= from || now <= until;
     }
 
     // ── ETag ──────────────────────────────────────────────────────────────────

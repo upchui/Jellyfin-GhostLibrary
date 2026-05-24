@@ -10,20 +10,26 @@
          class="page type-interior pluginConfigurationPage">
         <div data-role="content">
             <div class="content-primary">
+
+                <!-- ── Tab bar ──────────────────────────────────────────── -->
+                <div style="display:flex; gap:0; margin-bottom:1.5em; border-bottom:2px solid rgba(255,255,255,.1);">
+                    <button type="button" id="tabBtnSettings" onclick="showTab('settings')"
+                            style="background:none; border:none; color:inherit; padding:10px 20px; cursor:pointer; font-size:.95em; border-bottom:2px solid #00a4dc; margin-bottom:-2px; font-weight:600;">
+                        Settings
+                    </button>
+                    <button type="button" id="tabBtnActivity" onclick="showTab('activity')"
+                            style="background:none; border:none; color:inherit; padding:10px 20px; cursor:pointer; font-size:.95em; border-bottom:2px solid transparent; margin-bottom:-2px; opacity:.6;">
+                        Activity Log
+                    </button>
+                </div>
+
+                <!-- ════════════════════════════════════════════════════════
+                     TAB: Settings
+                ════════════════════════════════════════════════════════ -->
+                <div id="tabSettings">
                 <form id="GhostLibraryConfigForm">
 
-                    <div class="sectionTitleContainer">
-                        <h2 class="sectionTitle">GhostLibrary</h2>
-                    </div>
-                    <p style="opacity:.75; margin-bottom:1.5em">
-                        Hide selected media libraries from the client home screen while keeping
-                        them fully accessible to other plugins (e.g.&nbsp;Cinema&nbsp;Mode) and
-                        the file system.
-                    </p>
-
-                    <!-- ════════════════════════════════════════════════════════
-                         SECTION: General options
-                    ════════════════════════════════════════════════════════ -->
+                    <!-- General options -->
                     <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">General</h3>
                     </div>
@@ -31,12 +37,14 @@
                          style="display:flex; flex-direction:column; gap:8px; margin-bottom:1.75em">
                     </div>
 
-                    <!-- ════════════════════════════════════════════════════════
-                         SECTION: Libraries
-                    ════════════════════════════════════════════════════════ -->
+                    <!-- Libraries -->
                     <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Libraries</h3>
                     </div>
+                    <p style="font-size:.8em; opacity:.55; margin-bottom:.5em">
+                        Click a library to cycle through modes:
+                        <strong>Visible</strong> → <strong>Hidden</strong> → <strong>Stealth</strong> (appears empty).
+                    </p>
                     <div id="ghostLibStatus"
                          style="font-size:.82em; opacity:.55; margin-bottom:.6em; min-height:1.2em">
                     </div>
@@ -45,47 +53,89 @@
                         <p style="opacity:.5">Loading…</p>
                     </div>
 
-                    <!-- ════════════════════════════════════════════════════════
-                         SECTION: Schedule rules
-                    ════════════════════════════════════════════════════════ -->
-                    <div class="sectionTitleContainer" id="ghostScheduleTitle">
+                    <!-- Schedule -->
+                    <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Schedule (optional)</h3>
                     </div>
                     <p style="opacity:.6; font-size:.85em; margin-bottom:.8em">
-                        Define a time window during which each library is hidden.
-                        Outside the window the library is always visible.
-                        Leave blank to hide the library at all times.
+                        Set a time window during which each hidden library is active.
+                        Leave blank to hide at all times.
                     </p>
                     <div id="ghostScheduleList"
                          style="display:flex; flex-direction:column; gap:12px; margin-bottom:1.75em">
                     </div>
 
-                    <!-- ════════════════════════════════════════════════════════
-                         SECTION: Client filter
-                    ════════════════════════════════════════════════════════ -->
+                    <!-- Client filter -->
                     <div class="sectionTitleContainer">
                         <h3 class="sectionTitle" style="font-size:1em">Client Filter (optional)</h3>
                     </div>
                     <p style="opacity:.6; font-size:.85em; margin-bottom:.8em">
-                        Only filter the listed clients. Leave empty to filter all clients.<br>
-                        Enter comma-separated substrings matched against the
-                        <code>User-Agent</code> header (e.g. <em>AndroidTV, Infuse</em>).
+                        Only filter the listed clients. Leave empty to filter all.<br>
+                        Comma-separated <code>User-Agent</code> substrings
+                        (e.g. <em>AndroidTV, Infuse</em>).
                     </p>
                     <div style="margin-bottom:1.75em">
-                        <input id="ghostBlockedClients"
-                               type="text"
-                               is="emby-input"
+                        <input id="ghostBlockedClients" type="text" is="emby-input"
                                placeholder="e.g. AndroidTV, Infuse"
                                style="width:100%; box-sizing:border-box;" />
                     </div>
 
-                    <button is="emby-button"
-                            type="submit"
+                    <!-- Webhook -->
+                    <div class="sectionTitleContainer">
+                        <h3 class="sectionTitle" style="font-size:1em">Webhook (optional)</h3>
+                    </div>
+                    <p style="opacity:.6; font-size:.85em; margin-bottom:.8em">
+                        POST a JSON payload to this URL whenever the configuration is saved.
+                        Useful for Home Assistant or other automation tools.
+                    </p>
+                    <div style="margin-bottom:1.75em">
+                        <input id="ghostWebhookUrl" type="url" is="emby-input"
+                               placeholder="https://homeassistant.local/api/webhook/ghostlibrary"
+                               style="width:100%; box-sizing:border-box;" />
+                    </div>
+
+                    <!-- Export / Import -->
+                    <div class="sectionTitleContainer">
+                        <h3 class="sectionTitle" style="font-size:1em">Backup</h3>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-bottom:1.75em; flex-wrap:wrap;">
+                        <button type="button" is="emby-button"
+                                class="emby-button"
+                                onclick="exportConfig()"
+                                style="background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15); border-radius:4px; padding:8px 18px; cursor:pointer; color:inherit; font-size:.9em;">
+                            ⬇ Export config
+                        </button>
+                        <label style="background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15); border-radius:4px; padding:8px 18px; cursor:pointer; font-size:.9em;">
+                            ⬆ Import config
+                            <input type="file" id="ghostImportFile" accept=".json"
+                                   style="display:none" onchange="importConfig(event)" />
+                        </label>
+                    </div>
+
+                    <button is="emby-button" type="submit"
                             class="raised button-submit block emby-button">
                         <span>Save</span>
                     </button>
 
                 </form>
+                </div><!-- /tabSettings -->
+
+                <!-- ════════════════════════════════════════════════════════
+                     TAB: Activity Log
+                ════════════════════════════════════════════════════════ -->
+                <div id="tabActivity" style="display:none">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:.8em;">
+                        <p style="opacity:.6; font-size:.85em; margin:0">
+                            Last 100 filter events (newest first). Resets on server restart.
+                        </p>
+                        <button type="button" onclick="clearLog()"
+                                style="background:rgba(255,100,100,.12); border:1px solid rgba(255,100,100,.3); border-radius:4px; padding:6px 14px; cursor:pointer; color:inherit; font-size:.85em;">
+                            Clear log
+                        </button>
+                    </div>
+                    <div id="ghostLogTable"></div>
+                </div>
+
             </div>
         </div>
 
@@ -93,308 +143,305 @@
         (function () {
             var PLUGIN_ID = '8a3b2c7d-f1e4-4a9b-b6d3-1c2e5f8a0d4e';
 
-            /* ── Shared card style constants ─────────────────────────────── */
-            var CARD_OFF = 'display:flex; align-items:center; padding:14px 16px;' +
-                           'border-radius:6px; cursor:pointer; margin:0;' +
-                           'background:rgba(255,255,255,.04);' +
-                           'border:1px solid rgba(255,255,255,.08);';
-            var CARD_ON  = 'display:flex; align-items:center; padding:14px 16px;' +
-                           'border-radius:6px; cursor:pointer; margin:0;' +
-                           'background:rgba(0,164,220,.09);' +
-                           'border:1px solid rgba(0,164,220,.45);';
-            var ICON_OFF = 'width:42px; height:42px; border-radius:50%; flex-shrink:0;' +
-                           'display:flex; align-items:center; justify-content:center;' +
-                           'font-size:20px; margin-right:14px;' +
-                           'background:rgba(255,255,255,.08);';
-            var ICON_ON  = ICON_OFF.replace('rgba(255,255,255,.08)', 'rgba(0,164,220,.22)');
-            var TICK_OFF = 'width:22px; height:22px; border-radius:50%; flex-shrink:0;' +
-                           'display:flex; align-items:center; justify-content:center;' +
-                           'font-size:13px; margin-left:16px;' +
-                           'border:2px solid rgba(255,255,255,.22); color:transparent;';
-            var TICK_ON  = 'width:22px; height:22px; border-radius:50%; flex-shrink:0;' +
-                           'display:flex; align-items:center; justify-content:center;' +
-                           'font-size:13px; margin-left:16px;' +
-                           'background:#00a4dc; border:2px solid #00a4dc; color:#fff;';
-
-            var TYPE_ICONS = {
-                movies:'🎬', tvshows:'📺', music:'🎵', musicvideos:'🎸',
-                homevideos:'🏠', boxsets:'📦', books:'📚', photos:'📷', mixed:'📁'
+            /* ── Card styles ─────────────────────────────────────────────── */
+            var BASE = 'display:flex; align-items:center; padding:14px 16px;' +
+                       'border-radius:6px; cursor:pointer; margin:0; user-select:none;';
+            var S = {
+                visible: BASE + 'background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);',
+                hidden:  BASE + 'background:rgba(0,164,220,.09);  border:1px solid rgba(0,164,220,.45);',
+                stealth: BASE + 'background:rgba(180,120,220,.09);border:1px solid rgba(180,120,220,.45);'
             };
-            var TYPE_LABELS = {
-                movies:'Movies', tvshows:'TV Shows', music:'Music',
-                musicvideos:'Music Videos', homevideos:'Home Videos',
-                boxsets:'Collections', books:'Books', photos:'Photos', mixed:'Mixed'
+            var IS = {
+                visible: 'width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:14px;background:rgba(255,255,255,.08);',
+                hidden:  'width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:14px;background:rgba(0,164,220,.22);',
+                stealth: 'width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:14px;background:rgba(180,120,220,.22);'
+            };
+            var TS = {
+                visible: 'width:60px;flex-shrink:0;text-align:center;font-size:.7em;opacity:.4;margin-left:12px;',
+                hidden:  'width:60px;flex-shrink:0;text-align:center;font-size:.7em;color:#00a4dc;margin-left:12px;font-weight:600;',
+                stealth: 'width:60px;flex-shrink:0;text-align:center;font-size:.7em;color:#c07fe0;margin-left:12px;font-weight:600;'
+            };
+
+            var TYPE_ICONS = { movies:'🎬',tvshows:'📺',music:'🎵',musicvideos:'🎸',homevideos:'🏠',boxsets:'📦',books:'📚',photos:'📷',mixed:'📁' };
+            var TYPE_LABELS = { movies:'Movies',tvshows:'TV Shows',music:'Music',musicvideos:'Music Videos',homevideos:'Home Videos',boxsets:'Collections',books:'Books',photos:'Photos',mixed:'Mixed' };
+
+            /* ── Tab switching ───────────────────────────────────────────── */
+            window.showTab = function (name) {
+                document.getElementById('tabSettings').style.display = name === 'settings' ? '' : 'none';
+                document.getElementById('tabActivity').style.display = name === 'activity' ? '' : 'none';
+                document.getElementById('tabBtnSettings').style.cssText =
+                    'background:none;border:none;color:inherit;padding:10px 20px;cursor:pointer;font-size:.95em;border-bottom:2px solid ' +
+                    (name === 'settings' ? '#00a4dc' : 'transparent') +
+                    ';margin-bottom:-2px;font-weight:' + (name === 'settings' ? '600' : '400') + ';opacity:' + (name === 'settings' ? '1' : '.6') + ';';
+                document.getElementById('tabBtnActivity').style.cssText =
+                    'background:none;border:none;color:inherit;padding:10px 20px;cursor:pointer;font-size:.95em;border-bottom:2px solid ' +
+                    (name === 'activity' ? '#00a4dc' : 'transparent') +
+                    ';margin-bottom:-2px;font-weight:' + (name === 'activity' ? '600' : '400') + ';opacity:' + (name === 'activity' ? '1' : '.6') + ';';
+                if (name === 'activity') loadLog();
             };
 
             /* ── Toggle card factory ─────────────────────────────────────── */
             function makeToggleCard(icon, title, subtitle, isOn, onChange) {
-                var card   = document.createElement('label');
+                var card = document.createElement('label');
+                var CARD_OFF = 'display:flex;align-items:center;padding:14px 16px;border-radius:6px;cursor:pointer;margin:0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);';
+                var CARD_ON  = 'display:flex;align-items:center;padding:14px 16px;border-radius:6px;cursor:pointer;margin:0;background:rgba(0,164,220,.09);border:1px solid rgba(0,164,220,.45);';
+                var ICON_OFF = 'width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:14px;background:rgba(255,255,255,.08);';
+                var ICON_ON  = 'width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;margin-right:14px;background:rgba(0,164,220,.22);';
+                var TICK_OFF = 'width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;margin-left:16px;border:2px solid rgba(255,255,255,.22);color:transparent;';
+                var TICK_ON  = 'width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;margin-left:16px;background:#00a4dc;border:2px solid #00a4dc;color:#fff;';
                 card.style.cssText = isOn ? CARD_ON : CARD_OFF;
-
                 var cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.checked = isOn;
-                cb.style.cssText = 'position:absolute;opacity:0;width:0;height:0;pointer-events:none;';
-
-                var iconEl = document.createElement('div');
-                iconEl.style.cssText = isOn ? ICON_ON : ICON_OFF;
-                iconEl.textContent = icon;
-
-                var info = document.createElement('div');
-                info.style.cssText = 'flex:1; min-width:0;';
-                var nameEl = document.createElement('div');
-                nameEl.style.cssText = 'font-size:1em; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-                nameEl.textContent = title;
+                cb.type='checkbox'; cb.checked=isOn;
+                cb.style.cssText='position:absolute;opacity:0;width:0;height:0;pointer-events:none;';
+                var iconEl=document.createElement('div'); iconEl.style.cssText=isOn?ICON_ON:ICON_OFF; iconEl.textContent=icon;
+                var info=document.createElement('div'); info.style.cssText='flex:1;min-width:0;';
+                var nameEl=document.createElement('div'); nameEl.style.cssText='font-size:1em;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'; nameEl.textContent=title;
                 info.appendChild(nameEl);
-                if (subtitle) {
-                    var sub = document.createElement('div');
-                    sub.style.cssText = 'font-size:.78em; opacity:.5; margin-top:2px;';
-                    sub.textContent = subtitle;
-                    info.appendChild(sub);
-                }
-
-                var tick = document.createElement('div');
-                tick.style.cssText = isOn ? TICK_ON : TICK_OFF;
-                tick.textContent   = isOn ? '✓' : '';
-
-                cb.addEventListener('change', function () {
-                    var on = this.checked;
-                    card.style.cssText   = on ? CARD_ON   : CARD_OFF;
-                    iconEl.style.cssText = on ? ICON_ON   : ICON_OFF;
-                    tick.style.cssText   = on ? TICK_ON   : TICK_OFF;
-                    tick.textContent     = on ? '✓' : '';
-                    if (onChange) onChange(on);
-                });
-
-                card.appendChild(cb);
-                card.appendChild(iconEl);
-                card.appendChild(info);
-                card.appendChild(tick);
-                return { root: card, checkbox: cb };
+                if (subtitle) { var sub=document.createElement('div'); sub.style.cssText='font-size:.78em;opacity:.5;margin-top:2px;'; sub.textContent=subtitle; info.appendChild(sub); }
+                var tick=document.createElement('div'); tick.style.cssText=isOn?TICK_ON:TICK_OFF; tick.textContent=isOn?'✓':'';
+                cb.addEventListener('change',function(){ var on=this.checked; card.style.cssText=on?CARD_ON:CARD_OFF; iconEl.style.cssText=on?ICON_ON:ICON_OFF; tick.style.cssText=on?TICK_ON:TICK_OFF; tick.textContent=on?'✓':''; if(onChange)onChange(on); });
+                card.appendChild(cb); card.appendChild(iconEl); card.appendChild(info); card.appendChild(tick);
+                return {root:card,checkbox:cb};
             }
 
             /* ── State ───────────────────────────────────────────────────── */
-            var optEnabled  = null;
-            var optAdmins   = null;
-            var optContent  = null;
+            var optEnabled=null, optAdmins=null, optContent=null;
+            var allLibraries=[];
+            // Per-library mode: 'visible' | 'hidden' | 'stealth'
+            var libModes={};
 
-            /* ── General section ─────────────────────────────────────────── */
             function renderGeneral(config) {
-                var c = document.getElementById('ghostGeneral');
-                c.innerHTML = '';
-
-                optEnabled = makeToggleCard('⚡', 'Plugin enabled',
-                    'Disable to pause all filtering without losing your settings.',
-                    config.IsEnabled !== false);
-
-                optAdmins = makeToggleCard('🛡️', 'Admins always see all libraries',
-                    'Administrators bypass the hidden list.',
-                    config.VisibleToAdmins !== false);
-
-                optContent = makeToggleCard('🔍', 'Hide content from hidden libraries',
-                    'Also removes items from Latest, Continue Watching and Next Up.',
-                    config.FilterContentItems !== false);
-
-                [optEnabled, optAdmins, optContent].forEach(function (o) {
-                    c.appendChild(o.root);
-                });
+                var c=document.getElementById('ghostGeneral'); c.innerHTML='';
+                optEnabled=makeToggleCard('⚡','Plugin enabled','Disable to pause all filtering without losing settings.',config.IsEnabled!==false);
+                optAdmins=makeToggleCard('🛡️','Admins always see all libraries','Administrators bypass the hidden list.',config.VisibleToAdmins!==false);
+                optContent=makeToggleCard('🔍','Hide content from hidden libraries','Also removes items from Latest, Continue Watching and Next Up.',config.FilterContentItems!==false);
+                [optEnabled,optAdmins,optContent].forEach(function(o){c.appendChild(o.root);});
             }
 
-            /* ── Library section ─────────────────────────────────────────── */
+            /* ── Library cards (3-state cycle) ───────────────────────────── */
             function updateLibStatus() {
-                var n = document.querySelectorAll('.ghost-lib-cb:checked').length;
-                document.getElementById('ghostLibStatus').textContent =
-                    n === 0 ? 'No libraries hidden' :
-                    n === 1 ? '1 library hidden'    : n + ' libraries hidden';
+                var h=0,s=0;
+                Object.keys(libModes).forEach(function(id){ if(libModes[id]==='hidden')h++; if(libModes[id]==='stealth')s++; });
+                var parts=[];
+                if(h) parts.push(h+' hidden');
+                if(s) parts.push(s+' stealth');
+                document.getElementById('ghostLibStatus').textContent = parts.length ? parts.join(', ') : 'No libraries hidden';
             }
 
-            var allLibraries = [];
+            function applyModeToCard(card, iconEl, badge, mode) {
+                card.style.cssText = S[mode];
+                iconEl.style.cssText = IS[mode];
+                badge.style.cssText = TS[mode];
+                badge.textContent = mode === 'visible' ? '' : mode.charAt(0).toUpperCase()+mode.slice(1);
+            }
 
-            function renderLibraries(libraries, hiddenIds) {
+            function renderLibraries(libraries, hiddenIds, stealthIds) {
                 allLibraries = libraries || [];
-                var list = document.getElementById('ghostLibList');
-                list.innerHTML = '';
+                var list=document.getElementById('ghostLibList');
+                list.innerHTML='';
                 if (!allLibraries.length) {
-                    list.innerHTML = '<p style="opacity:.5">No libraries found.</p>';
-                    updateLibStatus();
-                    renderSchedule([], {});
-                    return;
+                    list.innerHTML='<p style="opacity:.5">No libraries found.</p>';
+                    updateLibStatus(); return;
                 }
-                allLibraries.forEach(function (lib) {
-                    var hidden  = hiddenIds.indexOf(lib.ItemId) !== -1;
-                    var typeKey = (lib.CollectionType || 'mixed').toLowerCase();
-                    var card    = makeToggleCard(
-                        TYPE_ICONS[typeKey]  || '📁',
-                        lib.Name,
-                        TYPE_LABELS[typeKey] || lib.CollectionType || 'Mixed',
-                        hidden
-                    );
-                    card.checkbox.className = 'ghost-lib-cb';
-                    card.checkbox.dataset.libraryId = lib.ItemId;
-                    card.checkbox.addEventListener('change', function () {
+                allLibraries.forEach(function(lib) {
+                    var id=lib.ItemId;
+                    var mode = stealthIds.indexOf(id)!==-1 ? 'stealth' :
+                               hiddenIds.indexOf(id)!==-1  ? 'hidden'  : 'visible';
+                    libModes[id]=mode;
+                    var typeKey=(lib.CollectionType||'mixed').toLowerCase();
+
+                    var card=document.createElement('div');
+                    card.style.cssText=S[mode]; card.style.cursor='pointer';
+                    var iconEl=document.createElement('div');
+                    iconEl.style.cssText=IS[mode]; iconEl.textContent=TYPE_ICONS[typeKey]||'📁';
+                    var info=document.createElement('div'); info.style.cssText='flex:1;min-width:0;';
+                    var nameEl=document.createElement('div'); nameEl.style.cssText='font-size:1em;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'; nameEl.textContent=lib.Name;
+                    var subEl=document.createElement('div'); subEl.style.cssText='font-size:.78em;opacity:.5;margin-top:2px;'; subEl.textContent=TYPE_LABELS[typeKey]||lib.CollectionType||'Mixed';
+                    info.appendChild(nameEl); info.appendChild(subEl);
+                    var badge=document.createElement('div');
+                    badge.style.cssText=TS[mode]; badge.textContent=mode==='visible'?'':mode.charAt(0).toUpperCase()+mode.slice(1);
+                    card.appendChild(iconEl); card.appendChild(info); card.appendChild(badge);
+
+                    card.addEventListener('click', function() {
+                        var cur=libModes[id];
+                        var next=cur==='visible'?'hidden':cur==='hidden'?'stealth':'visible';
+                        libModes[id]=next;
+                        applyModeToCard(card, iconEl, badge, next);
                         updateLibStatus();
-                        refreshScheduleVisibility();
+                        refreshSchedule();
                     });
-                    list.appendChild(card.root);
+                    list.appendChild(card);
                 });
                 updateLibStatus();
             }
 
             /* ── Schedule section ────────────────────────────────────────── */
             function scheduleRuleMap(rules) {
-                var m = {};
-                (rules || []).forEach(function (r) { m[r.LibraryId] = r; });
-                return m;
+                var m={}; (rules||[]).forEach(function(r){m[r.LibraryId]=r;}); return m;
             }
 
-            function renderSchedule(rules, _ignored) {
-                var ruleMap = scheduleRuleMap(rules);
-                var container = document.getElementById('ghostScheduleList');
-                container.innerHTML = '';
+            var currentScheduleRules=[];
 
-                var checkedLibs = Array.prototype.slice
-                    .call(document.querySelectorAll('.ghost-lib-cb:checked'));
+            function refreshSchedule() {
+                renderSchedule(currentScheduleRules);
+            }
 
-                if (!checkedLibs.length) {
-                    container.innerHTML =
-                        '<p style="opacity:.4; font-size:.85em">Select at least one library above to set schedules.</p>';
+            function renderSchedule(rules) {
+                currentScheduleRules=rules;
+                var ruleMap=scheduleRuleMap(rules);
+                var container=document.getElementById('ghostScheduleList');
+                container.innerHTML='';
+                var hiddenLibs=Object.keys(libModes).filter(function(id){return libModes[id]==='hidden';});
+                if(!hiddenLibs.length){
+                    container.innerHTML='<p style="opacity:.4;font-size:.85em">No libraries in Hidden mode — schedules only apply to Hidden libraries.</p>';
                     return;
                 }
-
-                checkedLibs.forEach(function (cb) {
-                    var libId  = cb.dataset.libraryId;
-                    var lib    = allLibraries.find(function (l) { return l.ItemId === libId; }) || {};
-                    var rule   = ruleMap[libId] || { HideFrom: '', HideUntil: '' };
-                    var typeKey = (lib.CollectionType || 'mixed').toLowerCase();
-
-                    var row = document.createElement('div');
-                    row.style.cssText =
-                        'display:flex; align-items:center; gap:12px;' +
-                        'padding:12px 16px; border-radius:6px;' +
-                        'background:rgba(255,255,255,.04);' +
-                        'border:1px solid rgba(255,255,255,.08);';
-
-                    var iconEl = document.createElement('div');
-                    iconEl.style.cssText =
-                        'width:36px; height:36px; border-radius:50%; flex-shrink:0;' +
-                        'display:flex; align-items:center; justify-content:center;' +
-                        'font-size:18px; background:rgba(255,255,255,.08);';
-                    iconEl.textContent = TYPE_ICONS[typeKey] || '📁';
-
-                    var nameEl = document.createElement('div');
-                    nameEl.style.cssText = 'flex:1; font-size:.95em; font-weight:500;';
-                    nameEl.textContent = lib.Name || libId;
-
-                    var fromLabel = document.createElement('span');
-                    fromLabel.style.cssText = 'font-size:.8em; opacity:.55; white-space:nowrap;';
-                    fromLabel.textContent = 'From';
-
-                    var fromInput = document.createElement('input');
-                    fromInput.type = 'time';
-                    fromInput.value = rule.HideFrom || '';
-                    fromInput.dataset.libraryId = libId;
-                    fromInput.dataset.field = 'from';
-                    fromInput.className = 'ghost-schedule-input';
-                    fromInput.style.cssText =
-                        'background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.15);' +
-                        'border-radius:4px; color:inherit; padding:4px 8px; font-size:.9em;' +
-                        'width:100px;';
-
-                    var untilLabel = document.createElement('span');
-                    untilLabel.style.cssText = 'font-size:.8em; opacity:.55; white-space:nowrap;';
-                    untilLabel.textContent = 'Until';
-
-                    var untilInput = document.createElement('input');
-                    untilInput.type = 'time';
-                    untilInput.value = rule.HideUntil || '';
-                    untilInput.dataset.libraryId = libId;
-                    untilInput.dataset.field = 'until';
-                    untilInput.className = 'ghost-schedule-input';
-                    untilInput.style.cssText = fromInput.style.cssText;
-
-                    row.appendChild(iconEl);
-                    row.appendChild(nameEl);
-                    row.appendChild(fromLabel);
-                    row.appendChild(fromInput);
-                    row.appendChild(untilLabel);
-                    row.appendChild(untilInput);
+                hiddenLibs.forEach(function(libId) {
+                    var lib=allLibraries.find(function(l){return l.ItemId===libId;})||{};
+                    var rule=ruleMap[libId]||{HideFrom:'',HideUntil:''};
+                    var typeKey=(lib.CollectionType||'mixed').toLowerCase();
+                    var row=document.createElement('div');
+                    row.style.cssText='display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);';
+                    var iconEl=document.createElement('div');
+                    iconEl.style.cssText='width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(255,255,255,.08);';
+                    iconEl.textContent=TYPE_ICONS[typeKey]||'📁';
+                    var nameEl=document.createElement('div'); nameEl.style.cssText='flex:1;font-size:.95em;font-weight:500;'; nameEl.textContent=lib.Name||libId;
+                    var fromLabel=document.createElement('span'); fromLabel.style.cssText='font-size:.8em;opacity:.55;white-space:nowrap;'; fromLabel.textContent='From';
+                    var fromInput=document.createElement('input'); fromInput.type='time'; fromInput.value=rule.HideFrom||''; fromInput.dataset.libraryId=libId; fromInput.dataset.field='from'; fromInput.className='ghost-schedule-input';
+                    fromInput.style.cssText='background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:inherit;padding:4px 8px;font-size:.9em;width:100px;';
+                    var untilLabel=document.createElement('span'); untilLabel.style.cssText='font-size:.8em;opacity:.55;white-space:nowrap;'; untilLabel.textContent='Until';
+                    var untilInput=document.createElement('input'); untilInput.type='time'; untilInput.value=rule.HideUntil||''; untilInput.dataset.libraryId=libId; untilInput.dataset.field='until'; untilInput.className='ghost-schedule-input';
+                    untilInput.style.cssText=fromInput.style.cssText;
+                    row.appendChild(iconEl); row.appendChild(nameEl); row.appendChild(fromLabel); row.appendChild(fromInput); row.appendChild(untilLabel); row.appendChild(untilInput);
                     container.appendChild(row);
                 });
             }
 
-            function refreshScheduleVisibility() {
-                // Collect current input values before re-rendering
-                var currentRules = collectScheduleRules();
-                renderSchedule(currentRules, {});
-            }
-
             function collectScheduleRules() {
-                var rules = [];
-                var rows = document.querySelectorAll('.ghost-schedule-input[data-field="from"]');
-                rows.forEach(function (fromEl) {
-                    var libId    = fromEl.dataset.libraryId;
-                    var untilEl  = document.querySelector(
-                        '.ghost-schedule-input[data-library-id="' + libId + '"][data-field="until"]');
-                    var from  = fromEl.value.trim();
-                    var until = untilEl ? untilEl.value.trim() : '';
-                    if (from || until) {
-                        rules.push({ LibraryId: libId, HideFrom: from, HideUntil: until });
-                    }
+                var rules=[];
+                document.querySelectorAll('.ghost-schedule-input[data-field="from"]').forEach(function(fromEl){
+                    var libId=fromEl.dataset.libraryId;
+                    var untilEl=document.querySelector('.ghost-schedule-input[data-library-id="'+libId+'"][data-field="until"]');
+                    var from=fromEl.value.trim(), until=untilEl?untilEl.value.trim():'';
+                    if(from||until) rules.push({LibraryId:libId,HideFrom:from,HideUntil:until});
                 });
                 return rules;
             }
 
+            /* ── Activity log ────────────────────────────────────────────── */
+            function loadLog() {
+                var table=document.getElementById('ghostLogTable');
+                table.innerHTML='<p style="opacity:.5">Loading…</p>';
+                ApiClient.getJSON(ApiClient.getUrl('GhostLibrary/Log'))
+                    .then(function(entries){
+                        if(!entries||!entries.length){
+                            table.innerHTML='<p style="opacity:.5">No events recorded yet.</p>';
+                            return;
+                        }
+                        var html='<table style="width:100%;border-collapse:collapse;font-size:.82em;">' +
+                            '<thead><tr>' +
+                            '<th style="text-align:left;padding:6px 8px;opacity:.5;font-weight:500;border-bottom:1px solid rgba(255,255,255,.1);">Time</th>' +
+                            '<th style="text-align:left;padding:6px 8px;opacity:.5;font-weight:500;border-bottom:1px solid rgba(255,255,255,.1);">Path</th>' +
+                            '<th style="text-align:left;padding:6px 8px;opacity:.5;font-weight:500;border-bottom:1px solid rgba(255,255,255,.1);">Client</th>' +
+                            '<th style="text-align:right;padding:6px 8px;opacity:.5;font-weight:500;border-bottom:1px solid rgba(255,255,255,.1);">Removed</th>' +
+                            '<th style="text-align:left;padding:6px 8px;opacity:.5;font-weight:500;border-bottom:1px solid rgba(255,255,255,.1);">Note</th>' +
+                            '</tr></thead><tbody>';
+                        entries.forEach(function(e){
+                            var t=new Date(e.Timestamp).toLocaleTimeString();
+                            var ua=e.UserAgent||''; if(ua.length>30)ua=ua.slice(0,30)+'…';
+                            var removed=e.ItemsRemoved>0?'<span style="color:#e57373">-'+e.ItemsRemoved+'</span>':'0';
+                            var note=e.SkippedReason?'<span style="opacity:.45">'+e.SkippedReason+'</span>':'';
+                            html+='<tr style="border-bottom:1px solid rgba(255,255,255,.05);">' +
+                                '<td style="padding:6px 8px;white-space:nowrap;">'+t+'</td>' +
+                                '<td style="padding:6px 8px;opacity:.75;">'+e.Path+'</td>' +
+                                '<td style="padding:6px 8px;opacity:.55;">'+ua+'</td>' +
+                                '<td style="padding:6px 8px;text-align:right;">'+removed+'</td>' +
+                                '<td style="padding:6px 8px;">'+note+'</td>' +
+                                '</tr>';
+                        });
+                        html+='</tbody></table>';
+                        table.innerHTML=html;
+                    }).catch(function(){
+                        table.innerHTML='<p style="color:#e53935">Failed to load log.</p>';
+                    });
+            }
+
+            window.clearLog = function() {
+                fetch(ApiClient.getUrl('GhostLibrary/Log'), { method:'DELETE',
+                    headers:{'X-Emby-Authorization': 'MediaBrowser Token="'+ApiClient.accessToken()+'"'} })
+                    .then(function(){ loadLog(); });
+            };
+
+            /* ── Export / Import ─────────────────────────────────────────── */
+            window.exportConfig = function() {
+                ApiClient.getPluginConfiguration(PLUGIN_ID).then(function(cfg){
+                    var blob=new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'});
+                    var a=document.createElement('a');
+                    a.href=URL.createObjectURL(blob);
+                    a.download='GhostLibrary-config.json';
+                    a.click();
+                });
+            };
+
+            window.importConfig = function(event) {
+                var file=event.target.files[0]; if(!file) return;
+                var reader=new FileReader();
+                reader.onload=function(e){
+                    try {
+                        var imported=JSON.parse(e.target.result);
+                        ApiClient.updatePluginConfiguration(PLUGIN_ID, imported)
+                            .then(function(){ Dashboard.alert('Config imported. Reloading…'); location.reload(); });
+                    } catch(err) {
+                        Dashboard.alert('Invalid JSON file.');
+                    }
+                };
+                reader.readAsText(file);
+            };
+
             /* ── Bootstrap ───────────────────────────────────────────────── */
             document.getElementById('GhostLibraryConfigPage')
-                .addEventListener('pageshow', function () {
+                .addEventListener('pageshow', function() {
                     Dashboard.showLoadingMsg();
                     Promise.all([
                         ApiClient.getPluginConfiguration(PLUGIN_ID),
                         ApiClient.getJSON(ApiClient.getUrl('Library/VirtualFolders'))
-                    ]).then(function (r) {
-                        var config    = r[0];
-                        var libraries = r[1];
-
+                    ]).then(function(r){
+                        var config=r[0], libraries=r[1];
                         renderGeneral(config);
-                        renderLibraries(libraries, config.HiddenLibraryIds || []);
-                        renderSchedule(config.ScheduleRules || [], {});
-
-                        document.getElementById('ghostBlockedClients').value =
-                            config.BlockedClients || '';
-
+                        renderLibraries(libraries, config.HiddenLibraryIds||[], config.StealthLibraryIds||[]);
+                        renderSchedule(config.ScheduleRules||[]);
+                        document.getElementById('ghostBlockedClients').value=config.BlockedClients||'';
+                        document.getElementById('ghostWebhookUrl').value=config.WebhookUrl||'';
                         Dashboard.hideLoadingMsg();
-                    }).catch(function () {
-                        document.getElementById('ghostLibList').innerHTML =
-                            '<p style="color:#e53935">Failed to load libraries.</p>';
+                    }).catch(function(){
+                        document.getElementById('ghostLibList').innerHTML='<p style="color:#e53935">Failed to load libraries.</p>';
                         Dashboard.hideLoadingMsg();
                     });
                 });
 
             /* ── Save ────────────────────────────────────────────────────── */
             document.getElementById('GhostLibraryConfigForm')
-                .addEventListener('submit', function (e) {
+                .addEventListener('submit', function(e) {
                     e.preventDefault();
                     Dashboard.showLoadingMsg();
-
-                    var hiddenLibIds = Array.prototype.slice
-                        .call(document.querySelectorAll('.ghost-lib-cb:checked'))
-                        .map(function (cb) { return cb.dataset.libraryId; });
-
-                    ApiClient.getPluginConfiguration(PLUGIN_ID)
-                        .then(function (cfg) {
-                            cfg.IsEnabled          = optEnabled  && optEnabled.checkbox.checked;
-                            cfg.VisibleToAdmins    = optAdmins   && optAdmins.checkbox.checked;
-                            cfg.FilterContentItems = optContent  && optContent.checkbox.checked;
-                            cfg.HiddenLibraryIds   = hiddenLibIds;
-                            cfg.ScheduleRules      = collectScheduleRules();
-                            cfg.BlockedClients     =
-                                document.getElementById('ghostBlockedClients').value.trim();
-                            return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg);
-                        })
-                        .then(function (result) {
-                            Dashboard.processPluginConfigurationUpdateResult(result);
-                        });
-
+                    var hiddenLibIds=[], stealthLibIds=[];
+                    Object.keys(libModes).forEach(function(id){
+                        if(libModes[id]==='hidden')  hiddenLibIds.push(id);
+                        if(libModes[id]==='stealth') stealthLibIds.push(id);
+                    });
+                    ApiClient.getPluginConfiguration(PLUGIN_ID).then(function(cfg){
+                        cfg.IsEnabled          = optEnabled  && optEnabled.checkbox.checked;
+                        cfg.VisibleToAdmins    = optAdmins   && optAdmins.checkbox.checked;
+                        cfg.FilterContentItems = optContent  && optContent.checkbox.checked;
+                        cfg.HiddenLibraryIds   = hiddenLibIds;
+                        cfg.StealthLibraryIds  = stealthLibIds;
+                        cfg.ScheduleRules      = collectScheduleRules();
+                        cfg.BlockedClients     = document.getElementById('ghostBlockedClients').value.trim();
+                        cfg.WebhookUrl         = document.getElementById('ghostWebhookUrl').value.trim();
+                        return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg);
+                    }).then(function(result){
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    });
                     return false;
                 });
         })();

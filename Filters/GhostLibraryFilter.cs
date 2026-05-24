@@ -157,11 +157,15 @@ public class GhostLibraryFilter : IAsyncActionFilter
         }
 
         // ── Filter / mutate items ─────────────────────────────────────────────
+        // Always filter content on /Similar endpoints, regardless of the global toggle.
+        var isSimilarEndpoint = path.Contains("/Similar", StringComparison.OrdinalIgnoreCase);
+        var filterContent = config.FilterContentItems || isSimilarEndpoint;
+
         var filtered = new List<BaseItemDto>(queryResult.Items.Count);
         foreach (var item in queryResult.Items)
         {
             var action = GetAction(item, hiddenIds, stealthIds, hiddenFolderIds,
-                                   config.FilterContentItems);
+                                   filterContent);
             switch (action)
             {
                 case ItemAction.Remove:

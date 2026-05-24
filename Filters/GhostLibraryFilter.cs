@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
+using Jellyfin.Plugin.GhostLibrary.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Querying;
@@ -17,14 +18,6 @@ namespace Jellyfin.Plugin.GhostLibrary.Filters;
 /// <summary>
 /// Global ASP.NET Core action filter that removes configured hidden libraries —
 /// and optionally their content — from <see cref="QueryResult{T}"/> API responses.
-///
-/// Intercepted endpoints:
-/// <list type="bullet">
-///   <item><description>GET /Users/{userId}/Views — library tiles</description></item>
-///   <item><description>GET /Items — generic item queries (Latest, Resume, Next Up, …)</description></item>
-/// </list>
-///
-/// Internal <c>ILibraryManager</c> access (Cinema Mode etc.) is never affected.
 /// </summary>
 public class GhostLibraryFilter : IAsyncActionFilter
 {
@@ -75,22 +68,58 @@ public class GhostLibraryFilter : IAsyncActionFilter
             return;
         }
 
+        // ── Master switch ─────────────────────────────────────────────────────
+        if (!config.IsEnabled)
+        {
+            return;
+        }
+
+        // ── Client filter ─────────────────────────────────────────────────────
+        // If BlockedClients is non-empty, only filter requests whose User-Agent
+        // contains at least one of the configured substrings (case-insensitive).
+        if (!string.IsNullOrWhiteSpace(config.BlockedClients))
+        {
+            var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
+            var tokens = config.BlockedClients
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var isBlocked = tokens.Any(t =>
+                userAgent.Contains(t, StringComparison.OrdinalIgnoreCase));
+            if (!isBlocked)
+            {
+                return;
+            }
+        }
+
         // ── Admin bypass ──────────────────────────────────────────────────────
-        // Read the role directly from the validated JWT claim — no IUserManager
-        // call needed, which avoids ABI differences across Jellyfin versions.
         if (config.VisibleToAdmins
             && context.HttpContext.User.HasClaim(ClaimTypes.Role, "Administrator"))
         {
             return;
         }
 
-        // ── Build hidden-ID lookup ────────────────────────────────────────────
-        var hiddenIds = new HashSet<Guid>(
+        // ── Build hidden-ID sets ──────────────────────────────────────────────
+        var now = DateTime.Now.TimeOfDay;
+
+        // Respect per-library schedule: remove IDs whose hide-window does NOT
+        // cover the current time (i.e. the library should be visible right now).
+        var scheduleMap = (config.ScheduleRules ?? Array.Empty<ScheduleRule>())
+            .Where(r => !string.IsNullOrWhiteSpace(r.LibraryId)
+                        && TimeSpan.TryParse(r.HideFrom,  out _)
+                        && TimeSpan.TryParse(r.HideUntil, out _))
+            .ToDictionary(r => r.LibraryId, r => r);
+
+        var hiddenLibraryIds = new HashSet<Guid>(
             (config.HiddenLibraryIds ?? Array.Empty<string>())
+                .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
+                .Where(s => IsActiveSchedule(s, scheduleMap, now))
+                .Select(s => Guid.Parse(s)));
+
+        var hiddenFolderIds = new HashSet<Guid>(
+            (config.HiddenFolderIds ?? Array.Empty<string>())
                 .Where(s => !string.IsNullOrWhiteSpace(s) && Guid.TryParse(s, out _))
                 .Select(s => Guid.Parse(s)));
 
-        if (hiddenIds.Count == 0)
+        if (hiddenLibraryIds.Count == 0 && hiddenFolderIds.Count == 0)
         {
             return;
         }
@@ -99,7 +128,7 @@ public class GhostLibraryFilter : IAsyncActionFilter
         var filtered = new List<BaseItemDto>(queryResult.Items.Count);
         foreach (var item in queryResult.Items)
         {
-            if (!ShouldHide(item, hiddenIds, config.FilterContentItems))
+            if (!ShouldHide(item, hiddenLibraryIds, hiddenFolderIds, config.FilterContentItems))
             {
                 filtered.Add(item);
             }
@@ -117,34 +146,74 @@ public class GhostLibraryFilter : IAsyncActionFilter
         executedContext.HttpContext.Response.Headers["ETag"] = ComputeEtag(filtered);
     }
 
+    // ── Schedule helper ───────────────────────────────────────────────────────
+
     /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="item"/> should be
-    /// removed from the response.
+    /// Returns <see langword="true"/> when the library should currently be hidden.
+    /// A library with no rule is always hidden. A library whose rule does not cover
+    /// <paramref name="now"/> is visible (not hidden).
     /// </summary>
-    private bool ShouldHide(BaseItemDto item, HashSet<Guid> hiddenIds, bool filterContent)
+    private static bool IsActiveSchedule(
+        string libraryId,
+        Dictionary<string, ScheduleRule> scheduleMap,
+        TimeSpan now)
     {
-        // Library tile — direct ID match.
+        if (!scheduleMap.TryGetValue(libraryId, out var rule))
+        {
+            return true; // no rule → always hide
+        }
+
+        TimeSpan.TryParse(rule.HideFrom,  out var from);
+        TimeSpan.TryParse(rule.HideUntil, out var until);
+
+        // Handle overnight windows (e.g. 22:00 – 06:00)
+        if (from <= until)
+        {
+            return now >= from && now <= until;
+        }
+        else
+        {
+            return now >= from || now <= until;
+        }
+    }
+
+    // ── Item filter ───────────────────────────────────────────────────────────
+
+    private bool ShouldHide(
+        BaseItemDto item,
+        HashSet<Guid> hiddenLibraryIds,
+        HashSet<Guid> hiddenFolderIds,
+        bool filterContent)
+    {
+        // Top-level library tile
         if (item.Type == BaseItemKind.CollectionFolder)
         {
-            return hiddenIds.Contains(item.Id);
+            return hiddenLibraryIds.Contains(item.Id);
         }
 
-        // Media item — check if it lives inside a hidden library.
-        if (!filterContent)
+        // Sub-folder hidden directly by ID
+        if (hiddenFolderIds.Contains(item.Id))
         {
-            return false;
+            return true;
         }
 
-        return IsInsideHiddenLibrary(item.Id, hiddenIds);
+        // Media item inside a hidden library or hidden sub-folder
+        if (filterContent && (hiddenLibraryIds.Count > 0 || hiddenFolderIds.Count > 0))
+        {
+            return IsInsideHiddenFolder(item.Id, hiddenLibraryIds, hiddenFolderIds);
+        }
+
+        return false;
     }
 
     /// <summary>
-    /// Walks the parent chain of <paramref name="itemId"/> until a root
-    /// CollectionFolder is found. Returns <see langword="true"/> if that
-    /// root is in <paramref name="hiddenIds"/>.
-    /// ILibraryManager caches items in memory, so the traversal is fast.
+    /// Walks the parent chain. Returns <see langword="true"/> if any ancestor
+    /// is in the hidden-library or hidden-folder set.
     /// </summary>
-    private bool IsInsideHiddenLibrary(Guid itemId, HashSet<Guid> hiddenIds)
+    private bool IsInsideHiddenFolder(
+        Guid itemId,
+        HashSet<Guid> hiddenLibraryIds,
+        HashSet<Guid> hiddenFolderIds)
     {
         var item = _libraryManager.GetItemById(itemId);
         if (item is null)
@@ -155,7 +224,7 @@ public class GhostLibraryFilter : IAsyncActionFilter
         var parentId = item.ParentId;
         while (parentId != Guid.Empty)
         {
-            if (hiddenIds.Contains(parentId))
+            if (hiddenLibraryIds.Contains(parentId) || hiddenFolderIds.Contains(parentId))
             {
                 return true;
             }
@@ -171,6 +240,8 @@ public class GhostLibraryFilter : IAsyncActionFilter
 
         return false;
     }
+
+    // ── ETag ──────────────────────────────────────────────────────────────────
 
     private static string ComputeEtag(IReadOnlyList<BaseItemDto> items)
     {
